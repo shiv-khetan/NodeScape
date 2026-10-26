@@ -12,6 +12,7 @@ Messages are capped at 4000 characters. Kinds:
 
 | Kind | Meaning |
 | --- | --- |
+| conflict | The file changed since it was read; reload before saving. |
 | invalid_input | An argument failed validation. |
 | ssh_missing | The system SSH executable was not found. |
 | auth_failed | SSH authentication failed. |

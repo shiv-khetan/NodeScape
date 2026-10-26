@@ -39,3 +39,20 @@ export const terminalInput = (id, data) => invoke('terminal_input', { id, data }
 export const terminalResize = (id, cols, rows) => invoke('terminal_resize', { id, cols, rows });
 export const terminalAck = (id, bytes) => invoke('terminal_ack', { id, bytes });
 export const terminalClose = id => invoke('terminal_close', { id });
+
+export const filesList = (target, path) => invoke('files_list', { target, path });
+export const fileMkdir = (target, path) => invoke('file_mkdir', { target, path });
+export const fileCreate = (target, path) => invoke('file_create', { target, path });
+export const fileRename = (target, from, to) => invoke('file_rename', { target, from, to });
+export const fileDelete = (target, path, recursive = false) => invoke('file_delete', { target, path, recursive });
+export const fileReadText = (target, path) => invoke('file_read_text', { target, path });
+export const fileWriteText = (target, path, text, expectedMtime) => invoke('file_write_text', { target, path, text, expectedMtime });
+export const pickUpload = () => invoke('plugin:dialog|open', { options: { title: 'Upload file', multiple: false, directory: false } });
+export const pickDownload = defaultPath => invoke('plugin:dialog|save', { options: { title: 'Download file', defaultPath } });
+export function transferStart(target, direction, localPath, remotePath, operationId, overwrite, onProgress) {
+  const Channel = window.__TAURI__?.core?.Channel;
+  if (!Channel) return Promise.reject({ kind: 'internal', message: 'Desktop progress channels are unavailable' });
+  const channel = new Channel();
+  channel.onmessage = onProgress;
+  return invoke('transfer_start', { target, direction, localPath, remotePath, operationId, overwrite, channel });
+}

@@ -139,9 +139,71 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     }
     throw { kind: 'invalid_input', message: 'Unknown terminal command' };
   }
+
+  // Deterministic SFTP / native picker fixture; no production fallback.
+  const files = new Map(), transferJobs = new Map();
+  const putFile = (path, kind = 'file', text = '', linkTarget) => files.set(path, {
+    name: path.split('/').pop(), kind, size: new TextEncoder().encode(text).length,
+    mtime: 1793059200, mode: kind === 'dir' ? 0o40755 : kind === 'symlink' ? 0o120777 : 0o100644, text, linkTarget,
+  });
+  putFile('/documents', 'dir'); putFile('/documents/note.txt', 'file', 'notes');
+  putFile('/ü ñ 文件 test.txt', 'file', 'hello ü ñ 文件');
+  putFile('/shortcut', 'symlink', '', '/documents'); putFile('/dangling', 'symlink', '', '/missing');
+  putFile('/<img src=x onerror=alert(1)>', 'file', 'untrusted name');
+  const fileError = (kind, message) => { throw { kind, message }; };
+  const requireFile = path => files.get(path) || fileError('not_found', 'File not found');
+  window.__finishTransfers = () => { for (const finish of [...transferJobs.values()]) finish.complete(); };
+  async function filesFixture(cmd, args) {
+    const path = args.path;
+    if (cmd === 'plugin:dialog|open') return 'C:\\synthetic\\upload.txt';
+    if (cmd === 'plugin:dialog|save') return 'C:\\synthetic\\' + args.options.defaultPath;
+    if (cmd === 'operation_cancel') { const job = transferJobs.get(args.id); if (job) { transferJobs.delete(args.id); job.reject({ kind: 'cancelled', message: 'Transfer cancelled' }); } return !!job; }
+    if (cmd === 'files_list') {
+      if (path === '/denied') fileError('permission_denied', 'Permission denied');
+      if (path !== '/' && requireFile(path).kind !== 'dir') fileError('remote', 'Not a directory');
+      const prefix = path === '/' ? '/' : path + '/';
+      return [...files].filter(([key]) => key.startsWith(prefix) && !key.slice(prefix.length).includes('/')).map(([,entry]) => ({ ...entry }));
+    }
+    if (cmd === 'file_mkdir' || cmd === 'file_create') {
+      if (files.has(path)) fileError('conflict', 'Destination already exists');
+      putFile(path, cmd === 'file_mkdir' ? 'dir' : 'file'); return null;
+    }
+    if (cmd === 'file_rename') {
+      requireFile(args.from); if (files.has(args.to)) fileError('conflict', 'Destination already exists');
+      for (const [key, entry] of [...files]) if (key === args.from || key.startsWith(args.from + '/')) {
+        const dest = args.to + key.slice(args.from.length); files.delete(key); files.set(dest, { ...entry, name: dest.split('/').pop() });
+      }
+      return null;
+    }
+    if (cmd === 'file_delete') {
+      const entry = requireFile(path), children = [...files.keys()].filter(key => key.startsWith(path + '/'));
+      if (entry.kind === 'dir' && children.length && !args.recursive) fileError('remote', 'Directory is not empty. Recursive deletion requires confirmation.');
+      files.delete(path); if (args.recursive && entry.kind === 'dir') for (const key of children) files.delete(key); return null;
+    }
+    if (cmd === 'file_read_text') {
+      const entry = requireFile(path); return { text: entry.text, mtime: entry.mtime, size: entry.size };
+    }
+    if (cmd === 'file_write_text') {
+      const entry = requireFile(path);
+      if (window.__filesConflict || entry.mtime !== args.expectedMtime) fileError('conflict', 'File changed on the server. Your edits have been kept.');
+      entry.text = args.text; entry.size = new TextEncoder().encode(args.text).length; entry.mtime++; return null;
+    }
+    if (cmd === 'transfer_start') return new Promise((resolve, reject) => {
+      args.channel.onmessage({ bytes: 0, total: 4 * 1024 * 1024 });
+      args.channel.onmessage({ bytes: 1024 * 1024, total: 4 * 1024 * 1024 });
+      transferJobs.set(args.operationId, { reject, complete: () => {
+        args.channel.onmessage({ bytes: 4 * 1024 * 1024, total: 4 * 1024 * 1024 });
+        if (args.direction === 'up') putFile(args.remotePath, 'file', 'uploaded');
+        transferJobs.delete(args.operationId); resolve(null);
+      } });
+    });
+    fileError('invalid_input', 'Unknown file command');
+  }
+
   window.__TAURI__ = { core: { Channel: FakeChannel, invoke: async (cmd, args = {}) => {
     window.__calls.push({ cmd, args: cmd === 'service_action' && args.password != null ? { ...args, password: '[redacted]' } : args });
     if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);
+    if (/^(files_|file_|transfer_|plugin:dialog\|)/.test(cmd) || cmd === 'operation_cancel') return filesFixture(cmd, args);
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
       const supplied = responses[args.host + ':' + key] ?? responses[key];

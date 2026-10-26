@@ -15,6 +15,7 @@ pub struct Target {
 #[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
     InvalidInput,
+    Conflict,
     SshMissing,
     AuthFailed,
     HostKeyUnknown,
@@ -238,6 +239,7 @@ mod tests {
         use ErrorKind::*;
         for (kind, name) in [
             (InvalidInput, "invalid_input"),
+            (Conflict, "conflict"),
             (SshMissing, "ssh_missing"),
             (AuthFailed, "auth_failed"),
             (HostKeyUnknown, "host_key_unknown"),

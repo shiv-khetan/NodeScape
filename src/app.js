@@ -9,11 +9,13 @@ import * as logs from './pages/logs.js';
 import * as network from './pages/network.js';
 import * as scheduled from './pages/scheduled.js';
 import * as terminal from './pages/terminal.js';
+import * as files from './pages/files.js';
 
 const main = $('#main'), hostInput = $('#host');
 const routes = {
   network: { page: network, load: target => backend.networkRead(target) },
   terminal: { page: terminal, load: async () => '' },
+  files: { page: files, load: target => files.load(target) },
   overview: { page: overview, load: target => backend.query(target, 'snapshot'), snapshot: true },
   services: { page: services, load: target => backend.query(target, 'snapshot'), snapshot: true },
   processes: { page: processes, load: target => backend.query(target, 'processes') },

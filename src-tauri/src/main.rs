@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod contracts;
+mod files;
 mod network;
+mod transfers;
 // P05 consumes effective config inspection.
 #[allow(dead_code)]
 mod ssh_config;
@@ -182,6 +184,7 @@ async fn service_action(
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             network::network_read,
             hosts,
@@ -193,7 +196,15 @@ fn main() {
             terminal::terminal_input,
             terminal::terminal_resize,
             terminal::terminal_ack,
-            terminal::terminal_close
+            terminal::terminal_close,
+            files::files_list,
+            files::file_mkdir,
+            files::file_create,
+            files::file_rename,
+            files::file_delete,
+            files::file_read_text,
+            files::file_write_text,
+            transfers::transfer_start
         ])
         .build(tauri::generate_context!())
         .expect("error while building NodeScape")

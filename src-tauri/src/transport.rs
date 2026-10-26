@@ -456,3 +456,150 @@ async fn invoke(
         }
     }
 }
+
+// Binary subsystem ownership is separate from script execution so run() keeps its existing semantics.
+pub struct Subsystem {
+    pub stdin: Option<tokio::process::ChildStdin>,
+    pub stdout: Option<tokio::process::ChildStdout>,
+    pub cancelled: watch::Receiver<bool>,
+    child: tokio::process::Child,
+    diagnostics: std::sync::Arc<Mutex<Vec<u8>>>,
+    stderr_task: tokio::task::JoinHandle<()>,
+    _registration: Registration,
+    _sender: watch::Sender<bool>,
+}
+
+impl Subsystem {
+    /// Preserve OpenSSH's typed authentication / trust diagnostic when SFTP initialization fails.
+    pub async fn failure(&mut self, fallback: AppError) -> AppError {
+        let status = tokio::time::timeout(Duration::from_millis(100), self.child.wait()).await;
+        if let Ok(Ok(status)) = status {
+            let _ = (&mut self.stderr_task).await;
+            let bytes = self.diagnostics.lock().unwrap_or_else(|e| e.into_inner());
+            if !status.success() {
+                return classify_ssh_failure(&String::from_utf8_lossy(&bytes), "", status.code());
+            }
+        }
+        fallback
+    }
+
+    pub async fn stop(&mut self) {
+        let _ = self.child.kill().await;
+        self.stderr_task.abort();
+    }
+}
+
+impl Drop for Subsystem {
+    fn drop(&mut self) {
+        self.stderr_task.abort();
+        // Child has kill_on_drop; the registration is removed even if the caller future is dropped.
+    }
+}
+
+/// Spawn only a named subsystem, never a remote shell command. The caller owns cancellation cleanup.
+pub async fn spawn_subsystem(
+    target: &Target,
+    subsystem: &str,
+    opts: RunOpts,
+) -> Result<Subsystem, AppError> {
+    if subsystem != "sftp" {
+        return Err(AppError::new(
+            ErrorKind::InvalidInput,
+            "Unsupported SSH subsystem",
+        ));
+    }
+    let deadline = Instant::now() + opts.timeout;
+    validate(target)?;
+    let (sender, mut cancelled) = watch::channel(false);
+    let registration = Registration::new(opts.operation_id.clone(), sender.clone())?;
+    let config = invoke(target, None, &opts, None, deadline, &mut cancelled).await?;
+    let proxy = config
+        .lines()
+        .find_map(|line| line.strip_prefix("proxyjump "))
+        .filter(|jump| !jump.eq_ignore_ascii_case("none"))
+        .map(|jump| {
+            proxy_command(
+                target,
+                &opts.ssh_program,
+                jump,
+                opts.known_hosts_file.as_deref(),
+            )
+        })
+        .transpose()?;
+    if *cancelled.borrow() {
+        return Err(AppError::new(ErrorKind::Cancelled, "Operation cancelled"));
+    }
+    let mut command = Command::new(&opts.ssh_program);
+    if let Some(config) = selected_config(target) {
+        command.arg("-F").arg(config);
+    }
+    command.arg("-T");
+    for option in OPTIONS {
+        // OpenSSH rejects `-s` together with SessionType, so request the subsystem through it.
+        let option = if *option == "SessionType=default" {
+            "SessionType=subsystem"
+        } else {
+            option
+        };
+        command.arg("-o").arg(option);
+    }
+    if let Some(path) = &opts.known_hosts_file {
+        command.arg("-o").arg(known_hosts_option(path)?);
+        for option in [
+            "GlobalKnownHostsFile=none",
+            "KnownHostsCommand=none",
+            "VerifyHostKeyDNS=no",
+        ] {
+            command.arg("-o").arg(option);
+        }
+    }
+    if let Some(proxy) = proxy {
+        command.arg("-o").arg(format!("ProxyCommand={proxy}"));
+    }
+    command
+        .arg("--")
+        .arg(&target.host)
+        .arg(subsystem)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let mut child = command.spawn().map_err(|error| {
+        AppError::new(
+            if error.kind() == io::ErrorKind::NotFound {
+                ErrorKind::SshMissing
+            } else {
+                ErrorKind::Internal
+            },
+            format!("Could not start ssh: {error}"),
+        )
+    })?;
+    let stdin = child.stdin.take();
+    let stdout = child.stdout.take();
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let diagnostics = std::sync::Arc::new(Mutex::new(Vec::new()));
+    let captured = diagnostics.clone();
+    let stderr_task = tokio::spawn(async move {
+        let mut buffer = [0; 4096];
+        while let Ok(count) = stderr.read(&mut buffer).await {
+            if count == 0 {
+                break;
+            }
+            let mut bytes = captured.lock().unwrap_or_else(|e| e.into_inner());
+            let keep = count.min(16_384usize.saturating_sub(bytes.len()));
+            bytes.extend_from_slice(&buffer[..keep]);
+        }
+    });
+    Ok(Subsystem {
+        stdin,
+        stdout,
+        cancelled,
+        child,
+        diagnostics,
+        stderr_task,
+        _registration: registration,
+        _sender: sender,
+    })
+}

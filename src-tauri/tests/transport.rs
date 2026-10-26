@@ -4,6 +4,8 @@ mod contracts;
 #[allow(dead_code)]
 #[path = "../src/ssh_config.rs"]
 mod ssh_config;
+// The SFTP launcher is exercised by files_real.rs, not here.
+#[allow(dead_code)]
 #[path = "../src/transport.rs"]
 mod transport;
 
