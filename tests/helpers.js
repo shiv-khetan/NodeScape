@@ -1,7 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { expect } = require('@playwright/test');
-const APP = 'http://127.0.0.1:4174/';
+// Parallel runs (e.g. several worktrees) pick distinct ports via NODESCAPE_TEST_PORT.
+const APP = `http://127.0.0.1:${process.env.NODESCAPE_TEST_PORT || 4174}/`;
 const fixture = fs.readFileSync(path.join(__dirname, 'fixtures/demo-backend.js'), 'utf8');
 
 async function offline(page) {
