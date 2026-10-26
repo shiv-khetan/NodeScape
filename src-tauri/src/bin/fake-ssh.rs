@@ -64,6 +64,33 @@ fn main() {
                 println!("{arg}");
             }
         }
+        "sudo-audit" => {
+            let mut script = String::new();
+            io::stdin().read_to_string(&mut script).unwrap();
+            let expected = "P='p'\\''ass $word;💫'; printf '%s\\n' \"$P\" | sudo -S -k -p '' -- 'systemctl' 'restart' '--' 'test.service'; s=$?; unset P; exit $s";
+            assert_eq!(script, expected);
+            assert!(!args
+                .iter()
+                .any(|arg| arg.contains("p'ass") || arg.contains("$word")));
+            assert_eq!(&args[args.len() - 3..], ["--", "sudo-audit", "sh -s"]);
+            assert!(args.iter().any(|arg| arg == "StrictHostKeyChecking=yes"));
+            print!("verified stdin and argv");
+        }
+        "sudo-stderr" | "sudo-stdout" => {
+            let mut script = String::new();
+            io::stdin().read_to_string(&mut script).unwrap();
+            // The password straddles the 4000-char cap; redacting first leaves exactly "[redacted]" at the end.
+            let text = format!(
+                "{}p'ass $word;💫\n{script}\nSorry, try again.",
+                "x".repeat(3990)
+            );
+            if host == "sudo-stderr" {
+                eprint!("{text}");
+            } else {
+                print!("{text}");
+            }
+            std::process::exit(1);
+        }
         "proxy-args" => {
             eprintln!("PROXY_ARGS");
             for arg in &args {
@@ -77,6 +104,7 @@ fn main() {
                 "exit-255-unknown" => (255, "Host key verification failed."),
                 "exit-255-changed" => (255, "REMOTE HOST IDENTIFICATION HAS CHANGED"),
                 "exit-255-unreachable" => (255, "Connection refused"),
+                "exit-sudo-wrong" => (1, "sudo: 1 incorrect password attempt"),
                 "exit-empty" => (42, ""),
                 _ => (42, "collector failed"),
             };

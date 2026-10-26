@@ -1,4 +1,7 @@
-use crate::contracts::{classify_ssh_failure, valid_host, AppError, ErrorKind, Target};
+use crate::contracts::{
+    classify_ssh_failure, classify_ssh_failure_redacted, redact_text, valid_host, AppError,
+    ErrorKind, Target,
+};
 use std::{
     collections::HashMap,
     io,
@@ -17,7 +20,9 @@ use tokio::{
     time::{sleep_until, Instant},
 };
 
-#[derive(Clone, Debug)]
+use zeroize::Zeroizing;
+
+#[derive(Clone)]
 pub struct RunOpts {
     pub timeout: Duration,
     /// Combined stdout and stderr capture limit, in bytes.
@@ -26,6 +31,8 @@ pub struct RunOpts {
     pub ssh_program: PathBuf,
     /// Restrict trust to this file; ignore global keys, DNS and KnownHostsCommand.
     pub known_hosts_file: Option<PathBuf>,
+    /// Secret removed from output before any remote diagnostic becomes an AppError.
+    pub(crate) redact: Option<Zeroizing<String>>,
 }
 
 impl Default for RunOpts {
@@ -36,6 +43,7 @@ impl Default for RunOpts {
             operation_id: None,
             ssh_program: ssh_program(),
             known_hosts_file: None,
+            redact: None,
         }
     }
 }
@@ -286,11 +294,11 @@ async fn capture(
     mut stream: impl AsyncRead + Unpin,
     captured: &AtomicUsize,
     limit: usize,
-) -> Result<Vec<u8>, AppError> {
-    let mut output = Vec::new();
-    let mut buffer = [0; 8192];
+) -> Result<Zeroizing<Vec<u8>>, AppError> {
+    let mut output = Zeroizing::new(Vec::new());
+    let mut buffer = Zeroizing::new([0; 8192]);
     loop {
-        let count = stream.read(&mut buffer).await.map_err(local_error)?;
+        let count = stream.read(&mut buffer[..]).await.map_err(local_error)?;
         if count == 0 {
             return Ok(output);
         }
@@ -426,16 +434,20 @@ async fn invoke(
     };
     match result {
         Ok((stdout, stderr, written, status)) => {
-            let stdout = String::from_utf8_lossy(&stdout).into_owned();
+            let secret = opts.redact.as_ref().map(|secret| secret.as_str());
+            let stdout = Zeroizing::new(String::from_utf8_lossy(&stdout).into_owned());
+            let stderr = Zeroizing::new(String::from_utf8_lossy(&stderr).into_owned());
             if !status.success() {
-                return Err(classify_ssh_failure(
-                    &String::from_utf8_lossy(&stderr),
-                    &stdout,
-                    status.code(),
-                ));
+                return Err(match secret {
+                    Some(secret) => {
+                        classify_ssh_failure_redacted(&stderr, &stdout, status.code(), Some(secret))
+                    }
+                    None => classify_ssh_failure(&stderr, &stdout, status.code()),
+                });
             }
             written.map_err(local_error)?;
-            Ok(stdout)
+            let mut stdout = redact_text(&stdout, secret);
+            Ok(std::mem::take(&mut *stdout))
         }
         Err(error) => {
             // Terminate and reap before returning; kill_on_drop also covers dropped caller futures.

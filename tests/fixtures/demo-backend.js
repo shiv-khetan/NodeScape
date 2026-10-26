@@ -103,10 +103,11 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
   }
 
   window.__TAURI__ = { core: { invoke: async (cmd, args = {}) => {
-    window.__calls.push({ cmd, args });
+    window.__calls.push({ cmd, args: cmd === 'service_action' && args.password != null ? { ...args, password: '[redacted]' } : args });
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
-      const value = responses[args.host + ':' + key] ?? responses[key];
+      const supplied = responses[args.host + ':' + key] ?? responses[key];
+      const value = cmd === 'service_action' && Array.isArray(supplied) ? supplied.shift() : supplied;
       if (value?.defer) await new Promise(resolve => window.__pending.push(resolve));
       const result = value?.defer ? value.value : value;
       if (result?.error) throw result.error;

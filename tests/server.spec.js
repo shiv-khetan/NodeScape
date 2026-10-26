@@ -139,9 +139,11 @@ test('stopping a service asks first and sends the exact unit', async ({ page }) 
   expect(act.args).toMatchObject({ host: 'testbox', unit: 'nginx.service', action: 'stop' });
 });
 
-test('sudo password errors get a readable message', async ({ page }) => {
+test('sudo_required opens the one-action password dialog', async ({ page }) => {
   await openServer(page, { snapshot: F.SNAPSHOT, service_action: { error: { kind: 'sudo_required', message: 'Elevation is required.' } } });
   await nav(page, 'Services');
   await page.locator('[data-svc="start"][data-u="backup.service"]').click();
-  await expect(page.locator('#toast')).toContainText('sudo needs a password');
+  const dialog = page.getByRole('dialog', { name: 'Administrator permission' });
+  await expect(dialog).toContainText('used once');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 });

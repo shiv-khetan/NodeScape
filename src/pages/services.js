@@ -1,5 +1,6 @@
 import { state, currentTarget, requestContext, isCurrent } from '../state.js';
 import { serviceAction } from '../backend.js';
+import { withSudo } from '../ui/sudo.js';
 import { esc, head, stat, svcClass, tag, segTabs, toast } from '../ui/dom.js';
 
 export function render(d) {
@@ -49,13 +50,19 @@ export function mount(el, { refresh }) {
     if (!action) return;
     const target = currentTarget(), request = requestContext();
     if (action !== 'start' && !confirm(`${action} ${unit} on ${target.host}?`)) return;
+    button.disabled = true;
     try {
-      await serviceAction(target, unit, action);
+      await withSudo(password => {
+        if (!isCurrent(request)) throw { kind: 'cancelled', message: 'Action cancelled' };
+        return serviceAction(target, unit, action, password);
+      });
       if (!isCurrent(request)) return;
       toast(`${action} ${unit}: ok`);
       refresh();
     } catch (err) {
-      if (isCurrent(request)) toast(err.kind === 'sudo_required' ? 'sudo needs a password — allow passwordless systemctl for this user' : err.message);
+      if (isCurrent(request) && err.kind !== 'cancelled') toast(err.message);
+    } finally {
+      button.disabled = false;
     }
   }, { signal: events.signal });
 }

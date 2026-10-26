@@ -5,10 +5,12 @@ mod network;
 // P05 consumes effective config inspection.
 #[allow(dead_code)]
 mod ssh_config;
+mod sudo;
 mod transport;
 
 use contracts::{valid_unit, AppError, ErrorKind, Target};
 use std::path::{Path, PathBuf};
+use zeroize::Zeroizing;
 
 // CPU and network are sampled first, before the script prints anything, so the app's own SSH output
 // doesn't show up as network traffic.
@@ -154,7 +156,9 @@ async fn service_action(
     action: String,
     config: Option<String>,
     operation_id: Option<String>,
+    password: Option<String>,
 ) -> Result<String, AppError> {
+    let password = password.map(Zeroizing::new);
     if !["start", "stop", "restart", "enable", "disable"].contains(&action.as_str())
         || !valid_unit(&unit)
     {
@@ -163,12 +167,14 @@ async fn service_action(
             "Refused: unknown action or invalid unit name",
         ));
     }
-    // sudo -n never prompts: fails fast unless the user allowed passwordless systemctl in sudoers.
-    run(
-        host,
-        config,
-        format!("sudo -n systemctl {action} -- {unit} 2>&1 && echo ok"),
-        operation_id,
+    sudo::run_privileged(
+        &Target { host, config },
+        &["systemctl", &action, "--", &unit],
+        password,
+        transport::RunOpts {
+            operation_id,
+            ..Default::default()
+        },
     )
     .await
 }

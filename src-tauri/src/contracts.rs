@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +55,16 @@ impl fmt::Display for AppError {
 impl std::error::Error for AppError {}
 
 pub fn classify_ssh_failure(stderr: &str, stdout: &str, status: Option<i32>) -> AppError {
-    let message = if !stderr.trim().is_empty() {
+    classify_ssh_failure_redacted(stderr, stdout, status, None)
+}
+
+pub(crate) fn classify_ssh_failure_redacted(
+    stderr: &str,
+    stdout: &str,
+    status: Option<i32>,
+    password: Option<&str>,
+) -> AppError {
+    let message = Zeroizing::new(if !stderr.trim().is_empty() {
         stderr.to_owned()
     } else if !stdout.trim().is_empty() {
         stdout.to_owned()
@@ -63,8 +73,8 @@ pub fn classify_ssh_failure(stderr: &str, stdout: &str, status: Option<i32>) -> 
             Some(code) => format!("ssh exited with {code}"),
             None => "ssh exited without an exit code".into(),
         }
-    };
-    let text = format!("{stderr}\n{stdout}");
+    });
+    let text = Zeroizing::new(format!("{stderr}\n{stdout}"));
     let kind = if text.contains("REMOTE HOST IDENTIFICATION HAS CHANGED") {
         ErrorKind::HostKeyChanged
     } else if text.contains("Host key verification failed")
@@ -95,6 +105,14 @@ pub fn classify_ssh_failure(stderr: &str, stdout: &str, status: Option<i32>) -> 
     .any(|s| text.contains(s))
     {
         ErrorKind::Unreachable
+    } else if text.contains("is not in the sudoers file") || text.contains("not allowed to execute")
+    {
+        ErrorKind::PermissionDenied
+    } else if text.contains("you must have a tty") {
+        return AppError::new(
+            ErrorKind::Remote,
+            "The server sudo requiretty policy requires an interactive terminal. Run this action in a terminal or ask the server administrator to review requiretty.",
+        );
     } else if text.contains("sudo: a password is required") {
         ErrorKind::SudoRequired
     } else if ["Sorry, try again", "incorrect password attempt"]
@@ -109,7 +127,17 @@ pub fn classify_ssh_failure(stderr: &str, stdout: &str, status: Option<i32>) -> 
     } else {
         ErrorKind::Remote
     };
-    AppError::new(kind, message)
+    AppError::new(kind, redact_text(&message, password))
+}
+
+pub(crate) fn redact_text(value: &str, password: Option<&str>) -> Zeroizing<String> {
+    let mut text = Zeroizing::new(value.to_owned());
+    if let Some(secret) = password.filter(|secret| !secret.is_empty()) {
+        let escaped = Zeroizing::new(secret.replace('\'', "'\\''"));
+        text = Zeroizing::new(text.replace(escaped.as_str(), "[redacted]"));
+        text = Zeroizing::new(text.replace(secret, "[redacted]"));
+    }
+    text
 }
 
 pub fn valid_host(h: &str) -> bool {
