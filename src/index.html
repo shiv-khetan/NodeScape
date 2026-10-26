@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NodeScape</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">NodeScape</div>
+    <nav id="nav" class="pillbar">
+      <button data-view="overview" class="on">Overview</button>
+      <button data-view="services">Services</button>
+      <button data-view="processes">Processes</button>
+      <button data-view="logs">Logs</button>
+      <button data-view="timers">Scheduled</button>
+    </nav>
+    <label class="pillbar hostbox" title="~/.ssh/config alias or user@host">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+      <input id="host" list="hosts" placeholder="user@host" spellcheck="false" autocomplete="off">
+      <datalist id="hosts"></datalist>
+    </label>
+    <button class="round" id="refresh" title="Refresh">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+    </button>
+    <button class="round" id="settingsBtn" title="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+    </button>
+  </header>
+  <dialog id="settings">
+    <form method="dialog">
+      <h2>Settings</h2>
+      <label for="sshConfig">SSH config file</label>
+      <input id="sshConfig" class="field" placeholder="Blank = ~/.ssh/config, e.g. C:\path\to\ssh\config" spellcheck="false">
+      <p class="muted">Host aliases, users, keys and HostKeyAlias come from this file. Unknown host keys are always refused.</p>
+      <div class="dlg-actions"><button value="cancel" class="pill">Cancel</button><button value="save" class="pill primary">Save</button></div>
+    </form>
+  </dialog>
+  <main id="main"></main>
+  <div id="toast" role="status"></div>
+  <script src="demo.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

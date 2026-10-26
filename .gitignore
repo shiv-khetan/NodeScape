@@ -1,0 +1,14 @@
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+# Never commit SSH material or local configs.
+*.pem
+*-ed25519
+*_ed25519
+id_*
+.env
+test-results/
+playwright-report/
+# Real-server test settings stay on this machine only.
+.env.*
+*.local.env
