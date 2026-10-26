@@ -46,7 +46,7 @@ export const fileCreate = (target, path) => invoke('file_create', { target, path
 export const fileRename = (target, from, to) => invoke('file_rename', { target, from, to });
 export const fileDelete = (target, path, recursive = false) => invoke('file_delete', { target, path, recursive });
 export const fileReadText = (target, path) => invoke('file_read_text', { target, path });
-export const fileWriteText = (target, path, text, expectedMtime) => invoke('file_write_text', { target, path, text, expectedMtime });
+export const fileWriteText = (target, path, text, expectedSha256) => invoke('file_write_text', { target, path, text, expectedSha256 });
 export const pickUpload = () => invoke('plugin:dialog|open', { options: { title: 'Upload file', multiple: false, directory: false } });
 export const pickDownload = defaultPath => invoke('plugin:dialog|save', { options: { title: 'Download file', defaultPath } });
 export function transferStart(target, direction, localPath, remotePath, operationId, overwrite, onProgress) {

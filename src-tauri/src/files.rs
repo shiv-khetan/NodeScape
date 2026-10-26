@@ -5,6 +5,7 @@ use russh_sftp::{
     protocol::{FileAttributes, OpenFlags, Packet, StatusCode},
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::hash::{BuildHasher, RandomState};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{timeout_at, Instant};
@@ -36,6 +37,7 @@ pub struct Entry {
 #[derive(Debug, Serialize)]
 pub struct TextFile {
     pub text: String,
+    pub sha256: String,
     pub mtime: u32,
     pub size: u64,
 }
@@ -109,6 +111,54 @@ pub fn check_mtime(actual: Option<u32>, expected: u32) -> Result<(), AppError> {
             ErrorKind::Conflict,
             "File changed on the server. Reload it before saving; your edits have been kept.",
         ));
+    }
+    Ok(())
+}
+
+fn recursive_delete_command(path: &str) -> Result<String, AppError> {
+    let path = checked_path(path, true)?;
+    Ok(format!(
+        "rm -r --one-file-system -- '{}'",
+        path.replace('\'', "'\"'\"'")
+    ))
+}
+
+fn sha256(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn check_sha256(bytes: &[u8], expected: &str) -> Result<(), AppError> {
+    if sha256(bytes) != expected {
+        return Err(AppError::new(
+            ErrorKind::Conflict,
+            "File changed on the server. Reload it before saving; your edits have been kept.",
+        ));
+    }
+    Ok(())
+}
+
+pub fn can_stage_replace(original: &FileAttributes, staged: &FileAttributes) -> bool {
+    original.uid.is_some()
+        && original.gid.is_some()
+        && original.uid == staged.uid
+        && original.gid == staged.gid
+}
+
+pub async fn copy_permissions(
+    raw: &RawSftpSession,
+    handle: &str,
+    original: &FileAttributes,
+) -> Result<(), AppError> {
+    if let Some(mode) = original.permissions {
+        raw.fsetstat(
+            handle,
+            FileAttributes {
+                permissions: Some(mode & 0o7777),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(sftp_error)?;
     }
     Ok(())
 }
@@ -326,6 +376,76 @@ impl Session {
             }
         }
     }
+
+    async fn read_bytes(&self, path: &str) -> Result<(Vec<u8>, FileAttributes), AppError> {
+        self.regular(path).await?;
+        let handle = self
+            .raw
+            .open(path, OpenFlags::READ, FileAttributes::default())
+            .await
+            .map_err(sftp_error)?
+            .handle;
+        let read = async {
+            let attrs = self
+                .raw
+                .fstat(handle.as_str())
+                .await
+                .map_err(sftp_error)?
+                .attrs;
+            let mtime = attrs.mtime.ok_or_else(|| {
+                AppError::new(
+                    ErrorKind::Remote,
+                    "Server did not provide a modification time",
+                )
+            })?;
+            if attrs.size.is_some_and(|size| size > TEXT_LIMIT as u64) {
+                return Err(AppError::new(
+                    ErrorKind::InvalidInput,
+                    "Text editor supports files up to 1 MiB. Download this file instead.",
+                ));
+            }
+            let mut bytes = Vec::new();
+            loop {
+                match self
+                    .raw
+                    .read(handle.as_str(), bytes.len() as u64, CHUNK as u32)
+                    .await
+                {
+                    Ok(data) => {
+                        if data.data.is_empty() {
+                            break;
+                        }
+                        bytes.extend_from_slice(&data.data);
+                        if bytes.len() > TEXT_LIMIT {
+                            return Err(AppError::new(
+                                ErrorKind::InvalidInput,
+                                "Text editor supports files up to 1 MiB. Download this file instead.",
+                            ));
+                        }
+                    }
+                    Err(error) if is_status(&error, StatusCode::Eof) => break,
+                    Err(error) => return Err(sftp_error(error)),
+                }
+            }
+            let after = self
+                .raw
+                .fstat(handle.as_str())
+                .await
+                .map_err(sftp_error)?
+                .attrs;
+            check_mtime(after.mtime, mtime)?;
+            if attrs.size != after.size {
+                return Err(AppError::new(
+                    ErrorKind::Conflict,
+                    "File changed while reading. Reload it.",
+                ));
+            }
+            Ok((bytes, attrs))
+        }
+        .await;
+        let closed = self.raw.close(handle).await.map_err(sftp_error);
+        read.and_then(|text| closed.map(|_| text))
+    }
 }
 
 #[tauri::command]
@@ -433,32 +553,29 @@ async fn no_symlink_ancestors(session: &Session, path: &str) -> Result<(), AppEr
 #[tauri::command]
 pub async fn file_delete(target: Target, path: String, recursive: bool) -> Result<(), AppError> {
     let path = checked_path(&path, true)?;
+    if recursive {
+        // transport::run classifies command stderr through classify_ssh_failure.
+        return transport::run(
+            &target,
+            &recursive_delete_command(&path)?,
+            RunOpts::default(),
+        )
+        .await
+        .map(|_| ());
+    }
     let mut session = Session::open(&target, None).await?;
     let result = async {
-        let mut pending = vec![(path, false)];
-        while let Some((path, visited)) = pending.pop() {
-            no_symlink_ancestors(&session, &path).await?;
-            let attrs = session
-                .raw
-                .lstat(path.as_str())
-                .await
-                .map_err(sftp_error)?
-                .attrs;
-            match entry_kind(&attrs) {
-                EntryKind::Dir if recursive && !visited => {
-                    let children = session.names(&path).await?;
-                    pending.push((path.clone(), true));
-                    for child in children {
-                        pending.push((child_path(&path, &child.filename)?, false));
-                    }
-                }
-                EntryKind::Dir => {
-                    session.raw.rmdir(path).await.map_err(sftp_error)?;
-                }
-                _ => {
-                    session.raw.remove(path).await.map_err(sftp_error)?;
-                }
-            }
+        no_symlink_ancestors(&session, &path).await?;
+        let attrs = session
+            .raw
+            .lstat(path.as_str())
+            .await
+            .map_err(sftp_error)?
+            .attrs;
+        if entry_kind(&attrs) == EntryKind::Dir {
+            session.raw.rmdir(path).await.map_err(sftp_error)?;
+        } else {
+            session.raw.remove(path).await.map_err(sftp_error)?;
         }
         Ok(())
     }
@@ -470,78 +587,14 @@ pub async fn file_delete(target: Target, path: String, recursive: bool) -> Resul
 pub async fn file_read_text(target: Target, path: String) -> Result<TextFile, AppError> {
     let path = checked_path(&path, false)?;
     let mut session = Session::open(&target, None).await?;
-    let result = async {
-        session.regular(&path).await?;
-        let handle = session
-            .raw
-            .open(path.as_str(), OpenFlags::READ, FileAttributes::default())
-            .await
-            .map_err(sftp_error)?
-            .handle;
-        let read = async {
-            let attrs = session
-                .raw
-                .fstat(handle.as_str())
-                .await
-                .map_err(sftp_error)?
-                .attrs;
-            let mtime = attrs.mtime.ok_or_else(|| {
-                AppError::new(
-                    ErrorKind::Remote,
-                    "Server did not provide a modification time",
-                )
-            })?;
-            if attrs.size.is_some_and(|size| size > TEXT_LIMIT as u64) {
-                return Err(AppError::new(
-                    ErrorKind::InvalidInput,
-                    "Text editor supports files up to 1 MiB. Download this file instead.",
-                ));
-            }
-            let mut bytes = Vec::new();
-            loop {
-                match session
-                    .raw
-                    .read(handle.as_str(), bytes.len() as u64, CHUNK as u32)
-                    .await
-                {
-                    Ok(data) => {
-                        if data.data.is_empty() {
-                            break;
-                        }
-                        bytes.extend_from_slice(&data.data);
-                        if bytes.len() > TEXT_LIMIT {
-                            return decode_text(bytes).map(|_| unreachable!());
-                        }
-                    }
-                    Err(error) if is_status(&error, StatusCode::Eof) => break,
-                    Err(error) => return Err(sftp_error(error)),
-                }
-            }
-            let after = session
-                .raw
-                .fstat(handle.as_str())
-                .await
-                .map_err(sftp_error)?
-                .attrs;
-            check_mtime(after.mtime, mtime)?;
-            if attrs.size != after.size {
-                return Err(AppError::new(
-                    ErrorKind::Conflict,
-                    "File changed while reading. Reload it.",
-                ));
-            }
-            let size = bytes.len() as u64;
-            Ok(TextFile {
-                text: decode_text(bytes)?,
-                mtime,
-                size,
-            })
-        }
-        .await;
-        let closed = session.raw.close(handle).await.map_err(sftp_error);
-        read.and_then(|text| closed.map(|_| text))
-    }
-    .await;
+    let result = session.read_bytes(&path).await.and_then(|(bytes, attrs)| {
+        Ok(TextFile {
+            sha256: sha256(&bytes),
+            size: bytes.len() as u64,
+            text: decode_text(bytes)?,
+            mtime: attrs.mtime.expect("mtime checked during read"),
+        })
+    });
     session.finish(result).await
 }
 
@@ -550,7 +603,7 @@ pub async fn file_write_text(
     target: Target,
     path: String,
     text: String,
-    expected_mtime: u32,
+    expected_sha256: String,
 ) -> Result<(), AppError> {
     let path = checked_path(&path, true)?;
     if text.len() > TEXT_LIMIT {
@@ -560,11 +613,56 @@ pub async fn file_write_text(
     let mut session = Session::open(&target, None).await?;
     let mut created = false;
     let result = async {
-        session.require_atomic_rename()?;
         let original = session.regular(&path).await?;
-        check_mtime(original.mtime, expected_mtime)?;
-        let handle = session.create_exclusive(&stage).await?;
+        let stage_handle = session.create_exclusive(&stage).await?;
         created = true;
+        let staged = async {
+            let attrs = session
+                .raw
+                .fstat(stage_handle.as_str())
+                .await
+                .map_err(sftp_error)?
+                .attrs;
+            let staged = can_stage_replace(&original, &attrs);
+            if staged {
+                session.require_atomic_rename()?;
+            }
+            Ok::<_, AppError>(staged)
+        }
+        .await;
+        let staged = match staged {
+            Ok(true) => true,
+            other => {
+                let closed = session
+                    .raw
+                    .close(stage_handle.as_str())
+                    .await
+                    .map_err(sftp_error);
+                let staged = other?;
+                closed?;
+                staged
+            }
+        };
+        // A concurrent edit can still land between a fingerprint check and publishing.
+        let handle = if staged {
+            stage_handle
+        } else {
+            session.remove_partial(&target, &stage).await?;
+            created = false;
+            let (bytes, _) = session.read_bytes(&path).await?;
+            check_sha256(&bytes, &expected_sha256)?;
+            // In-place writes are not atomic, but preserve owner, group, mode and ACLs.
+            session
+                .raw
+                .open(
+                    path.as_str(),
+                    OpenFlags::WRITE | OpenFlags::TRUNCATE,
+                    FileAttributes::default(),
+                )
+                .await
+                .map_err(sftp_error)?
+                .handle
+        };
         let written = async {
             for (index, chunk) in text.as_bytes().chunks(CHUNK).enumerate() {
                 session
@@ -573,40 +671,27 @@ pub async fn file_write_text(
                     .await
                     .map_err(sftp_error)?;
             }
-            if let Some(mode) = original.permissions {
-                session
-                    .raw
-                    .fsetstat(
-                        handle.as_str(),
-                        FileAttributes {
-                            permissions: Some(mode & 0o777),
-                            ..Default::default()
-                        },
-                    )
-                    .await
-                    .map_err(sftp_error)?;
+            if staged {
+                copy_permissions(&session.raw, &handle, &original).await?;
             }
-            Ok(())
+            Ok::<_, AppError>(())
         }
         .await;
         let closed = session.raw.close(handle).await.map_err(sftp_error);
         written?;
         closed?;
-        let current = session.regular(&path).await?;
-        check_mtime(current.mtime, expected_mtime)?;
-        if current.size != original.size {
-            return Err(AppError::new(
-                ErrorKind::Conflict,
-                "File changed on the server. Your edits have been kept.",
-            ));
+        if staged {
+            let (bytes, _) = session.read_bytes(&path).await?;
+            check_sha256(&bytes, &expected_sha256)?;
+            session.atomic_rename(&stage, &path).await?;
         }
-        session.atomic_rename(&stage, &path).await
+        Ok(())
     }
     .await;
     let result = if result.is_err() && created {
         match session.remove_partial(&target, &stage).await {
             Ok(()) => result,
-            Err(_) => result.map_err(|error| {
+            Err(_) => result.map_err(|error: AppError| {
                 AppError::new(
                     error.kind,
                     format!(
@@ -625,6 +710,71 @@ pub async fn file_write_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recursive_delete_command_is_fixed_quoted_and_refuses_root() {
+        assert_eq!(
+            recursive_delete_command("/srv/tree").unwrap(),
+            "rm -r --one-file-system -- '/srv/tree'"
+        );
+        assert_eq!(
+            recursive_delete_command("/srv/quote'$(touch nope); ü").unwrap(),
+            "rm -r --one-file-system -- '/srv/quote'\"'\"'$(touch nope); ü'"
+        );
+        for path in ["/", "////", "/a/../", "relative", "/a\ncommand"] {
+            assert_eq!(
+                recursive_delete_command(path).unwrap_err().kind,
+                ErrorKind::InvalidInput
+            );
+        }
+    }
+    #[test]
+    fn fingerprint_detects_same_size_edits_without_an_mtime_change() {
+        let expected = sha256(b"first");
+        assert_eq!(expected.len(), 64);
+        assert!(check_sha256(b"first", &expected).is_ok());
+        assert_eq!(
+            check_sha256(b"other", &expected).unwrap_err().kind,
+            ErrorKind::Conflict
+        );
+        assert_eq!(
+            sha256(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+    #[test]
+    fn staged_replacement_requires_matching_known_uid_and_gid() {
+        let original = FileAttributes {
+            uid: Some(10),
+            gid: Some(20),
+            ..Default::default()
+        };
+        assert!(can_stage_replace(&original, &original));
+        for staged in [
+            FileAttributes {
+                uid: Some(11),
+                ..original.clone()
+            },
+            FileAttributes {
+                gid: Some(21),
+                ..original.clone()
+            },
+            FileAttributes {
+                uid: None,
+                ..original.clone()
+            },
+            FileAttributes {
+                gid: None,
+                ..original.clone()
+            },
+            FileAttributes::default(),
+        ] {
+            assert!(!can_stage_replace(&original, &staged));
+        }
+        assert!(!can_stage_replace(
+            &FileAttributes::default(),
+            &FileAttributes::default()
+        ));
+    }
     #[test]
     fn paths_are_absolute_and_safe_to_address() {
         for path in ["/", "/srv/ü ñ 文件 test.txt", "/srv/quote'$.txt"] {

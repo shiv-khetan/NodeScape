@@ -173,24 +173,73 @@ async fn files_crud_unicode_symlinks_conflict_and_denied_directory() {
             "create replaced an existing file",
         )?;
         files::file_rename(target.clone(), original, renamed.clone()).await?;
+        let mut session = Session::open(&target, None).await?;
+        let setup = session
+            .raw
+            .setstat(
+                renamed.as_str(),
+                FileAttributes {
+                    permissions: Some(0o755),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map(|_| ())
+            .map_err(files::sftp_error);
+        session.finish(setup).await?;
         let empty = files::file_read_text(target.clone(), renamed.clone()).await?;
         files::file_write_text(
             target.clone(),
             renamed.clone(),
             "hello ü ñ 文件\n".into(),
-            empty.mtime,
+            empty.sha256,
         )
         .await?;
+        let before = files::file_read_text(target.clone(), renamed.clone()).await?;
+        files::file_write_text(
+            target.clone(),
+            renamed.clone(),
+            "other ü ñ 文件\n".into(),
+            before.sha256.clone(),
+        )
+        .await?;
+        let mut session = Session::open(&target, None).await?;
+        // Pin both versions to the same second even when SSH latency crosses a clock tick.
+        let setup = session
+            .raw
+            .setstat(
+                renamed.as_str(),
+                FileAttributes {
+                    atime: Some(before.mtime),
+                    mtime: Some(before.mtime),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map(|_| ())
+            .map_err(files::sftp_error);
+        session.finish(setup).await?;
         let text = files::file_read_text(target.clone(), renamed.clone()).await?;
         require(
-            text.text == "hello ü ñ 文件\n",
+            text.mtime == before.mtime && text.size == before.size,
+            "same-second test setup failed",
+        )?;
+        let entries = files::files_list(target.clone(), base.clone()).await?;
+        require(
+            entries.iter().any(|e| {
+                e.name == "ü ñ 文件 test.txt" && e.mode.map(|m| m & 0o7777) == Some(0o755)
+            }),
+            "staged save changed executable permissions",
+        )?;
+        require(
+            text.text == "other ü ñ 文件\n",
             "Unicode text round trip failed",
         )?;
         let conflict = files::file_write_text(
             target.clone(),
             renamed.clone(),
             "must not replace".into(),
-            text.mtime.wrapping_sub(1),
+            before.sha256,
         )
         .await;
         require(
@@ -277,8 +326,67 @@ async fn files_crud_unicode_symlinks_conflict_and_denied_directory() {
         // Removing a link must leave its target intact.
         files::file_delete(target.clone(), format!("{base}/shortcut"), true).await?;
         require(
-            files::file_read_text(target.clone(), renamed).await?.text == text.text,
+            files::file_read_text(target.clone(), renamed.clone())
+                .await?
+                .text
+                == text.text,
             "delete followed a symlink",
+        )?;
+        let tree = format!("{base}/tree");
+        let outside = format!("{base}/outside");
+        let marker = format!("{outside}/keep.txt");
+        files::file_mkdir(target.clone(), tree.clone()).await?;
+        files::file_mkdir(target.clone(), outside.clone()).await?;
+        files::file_create(target.clone(), marker.clone()).await?;
+        let mut session = Session::open(&target, None).await?;
+        let setup = session
+            .raw
+            .symlink(outside.as_str(), format!("{tree}/link"))
+            .await
+            .map(|_| ())
+            .map_err(files::sftp_error);
+        session.finish(setup).await?;
+        files::file_delete(target.clone(), tree, true).await?;
+        require(
+            files::file_read_text(target.clone(), marker)
+                .await?
+                .text
+                .is_empty(),
+            "recursive delete followed directory symlink",
+        )?;
+        require(
+            !files::files_list(target.clone(), base.clone())
+                .await?
+                .iter()
+                .any(|e| e.name == "tree"),
+            "recursive delete left tree behind",
+        )?;
+
+        let local = tempfile::tempdir().map_err(local_error)?;
+        let source = local.path().join("overwrite.txt");
+        std::fs::write(&source, "uploaded replacement").map_err(local_error)?;
+        transfers::transfer(
+            target.clone(),
+            "up".into(),
+            source.to_string_lossy().into_owned(),
+            renamed.clone(),
+            files::staging_name(),
+            true,
+            |_| Ok(()),
+        )
+        .await?;
+        require(
+            files::file_read_text(target.clone(), renamed).await?.text == "uploaded replacement",
+            "overwrite upload failed",
+        )?;
+        require(
+            files::files_list(target.clone(), base)
+                .await?
+                .iter()
+                .any(|e| {
+                    e.name == "ü ñ 文件 test.txt" && e.mode.map(|m| m & 0o7777) == Some(0o755)
+                }),
+            "overwrite upload changed executable permissions",
         )?;
         Ok::<_, AppError>(())
     })

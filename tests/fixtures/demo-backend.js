@@ -153,6 +153,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
   const fileError = (kind, message) => { throw { kind, message }; };
   const requireFile = path => files.get(path) || fileError('not_found', 'File not found');
   window.__finishTransfers = () => { for (const finish of [...transferJobs.values()]) finish.complete(); };
+  const fileSha256 = async text => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))), byte => byte.toString(16).padStart(2, '0')).join('');
   async function filesFixture(cmd, args) {
     const path = args.path;
     if (cmd === 'plugin:dialog|open') return 'C:\\synthetic\\upload.txt';
@@ -181,11 +182,11 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
       files.delete(path); if (args.recursive && entry.kind === 'dir') for (const key of children) files.delete(key); return null;
     }
     if (cmd === 'file_read_text') {
-      const entry = requireFile(path); return { text: entry.text, mtime: entry.mtime, size: entry.size };
+      const entry = requireFile(path); return { text: entry.text, mtime: entry.mtime, size: entry.size, sha256: await fileSha256(entry.text) };
     }
     if (cmd === 'file_write_text') {
       const entry = requireFile(path);
-      if (window.__filesConflict || entry.mtime !== args.expectedMtime) fileError('conflict', 'File changed on the server. Your edits have been kept.');
+      if (await fileSha256(entry.text) !== args.expectedSha256) fileError('conflict', 'File changed on the server. Your edits have been kept.');
       entry.text = args.text; entry.size = new TextEncoder().encode(args.text).length; entry.mtime++; return null;
     }
     if (cmd === 'transfer_start') return new Promise((resolve, reject) => {

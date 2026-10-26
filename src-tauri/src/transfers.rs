@@ -1,6 +1,9 @@
 use crate::{
     contracts::{AppError, ErrorKind, Target},
-    files::{checked_path, is_status, sftp_error, staging_name, staging_path, Session, CHUNK},
+    files::{
+        can_stage_replace, checked_path, copy_permissions, is_status, sftp_error, staging_name,
+        staging_path, Session, CHUNK,
+    },
 };
 use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
 use serde::Serialize;
@@ -58,59 +61,119 @@ async fn upload(
     }
     let mut file = fs::File::open(local).await.map_err(local_error)?;
     let total = file.metadata().await.map_err(local_error)?.len();
-    if overwrite {
-        session.require_atomic_rename()?;
+    let original = if overwrite {
+        match session.regular(remote).await {
+            Ok(attrs) => Some(attrs),
+            Err(error) if error.kind == ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        }
     } else {
         session.absent(remote).await?;
-    }
+        None
+    };
     if *session.process.cancelled.borrow() {
         return Err(cancelled());
     }
     let stage = staging_path(remote)?;
-    let handle = session.create_exclusive(&stage).await?;
     let mut bytes = 0u64;
-    let raw = &session.raw;
-    let receiver = &mut session.process.cancelled;
-    let result = if *receiver.borrow() {
-        Err(cancelled())
-    } else {
-        tokio::select! {
-            biased;
-            _ = receiver.changed() => Err(cancelled()),
-            result = async {
-                progress(Progress { bytes: 0, total })?;
-                let mut buffer = vec![0; CHUNK];
-                let mut last = Instant::now();
-                loop {
-                    let count = file.read(&mut buffer).await.map_err(local_error)?;
-                    if count == 0 { break; }
-                    raw.write(handle.as_str(), bytes, buffer[..count].to_vec()).await.map_err(sftp_error)?;
-                    bytes += count as u64;
-                    if last.elapsed() >= Duration::from_millis(100) || bytes == total {
-                        progress(Progress { bytes, total })?;
-                        last = Instant::now();
-                    }
-                }
-                if bytes != total { return Err(AppError::new(ErrorKind::Conflict, "Local file changed during upload")); }
-                Ok(())
-            } => result,
-        }
-    };
-    let closed = session.raw.close(handle).await.map_err(sftp_error);
+    let stage_handle = session.create_exclusive(&stage).await?;
     let result = async {
+        let staged = async {
+            if let Some(original) = &original {
+                let attrs = session
+                    .raw
+                    .fstat(stage_handle.as_str())
+                    .await
+                    .map_err(sftp_error)?
+                    .attrs;
+                if !can_stage_replace(original, &attrs) {
+                    return Ok(false);
+                }
+                session.require_atomic_rename()?;
+            } else if overwrite {
+                session.require_atomic_rename()?;
+            }
+            Ok::<_, AppError>(true)
+        }
+        .await;
+        let staged = match staged {
+            Ok(true) => true,
+            other => {
+                let closed = session
+                    .raw
+                    .close(stage_handle.as_str())
+                    .await
+                    .map_err(sftp_error);
+                let staged = other?;
+                closed?;
+                staged
+            }
+        };
+        let handle = if staged {
+            stage_handle
+        } else {
+            session.remove_partial(target, &stage).await?;
+            if *session.process.cancelled.borrow() {
+                return Err(cancelled());
+            }
+            // In-place writes are not atomic, but preserve owner, group, mode and ACLs.
+            session
+                .raw
+                .open(
+                    remote,
+                    OpenFlags::WRITE | OpenFlags::TRUNCATE,
+                    FileAttributes::default(),
+                )
+                .await
+                .map_err(sftp_error)?
+                .handle
+        };
+        let raw = &session.raw;
+        let receiver = &mut session.process.cancelled;
+        let result = if *receiver.borrow() {
+            Err(cancelled())
+        } else {
+            tokio::select! {
+                biased;
+                _ = receiver.changed() => Err(cancelled()),
+                result = async {
+                    progress(Progress { bytes: 0, total })?;
+                    let mut buffer = vec![0; CHUNK];
+                    let mut last = Instant::now();
+                    loop {
+                        let count = file.read(&mut buffer).await.map_err(local_error)?;
+                        if count == 0 { break; }
+                        raw.write(handle.as_str(), bytes, buffer[..count].to_vec()).await.map_err(sftp_error)?;
+                        bytes += count as u64;
+                        if last.elapsed() >= Duration::from_millis(100) || bytes == total {
+                            progress(Progress { bytes, total })?;
+                            last = Instant::now();
+                        }
+                    }
+                    if bytes != total { return Err(AppError::new(ErrorKind::Conflict, "Local file changed during upload")); }
+                    if let Some(original) = original.as_ref().filter(|_| staged) {
+                        copy_permissions(raw, &handle, original).await?;
+                    }
+                    Ok(())
+                } => result,
+            }
+        };
+        let closed = session.raw.close(handle).await.map_err(sftp_error);
         result?;
         closed?;
         if *session.process.cancelled.borrow() {
             return Err(cancelled());
         }
-        if overwrite {
-            session.atomic_rename(&stage, remote).await?;
-        } else {
-            session
-                .raw
-                .rename(stage.as_str(), remote)
-                .await
-                .map_err(sftp_error)?;
+        if staged {
+            if overwrite {
+                session.atomic_rename(&stage, remote).await?;
+            } else {
+                session
+                    .raw
+                    .rename(stage.as_str(), remote)
+                    .await
+                    .map_err(sftp_error)?;
+            }
         }
         Ok(())
     }

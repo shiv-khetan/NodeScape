@@ -36,18 +36,30 @@ test('delete cancellation and recursive second confirmation are explicit', async
   await expect(row(page, 'documents')).toHaveCount(0); expect(dialogs).toBe(2);
   expect(await page.evaluate(() => window.__calls.filter(x => x.cmd === 'file_delete').map(x => x.args.recursive))).toEqual([false, true]);
 });
-test('editor saves Unicode and preserves text on conflict', async ({ page }) => {
+test('editor sends SHA-256 and preserves text on fingerprint conflict', async ({ page }) => {
   await openFiles(page);
   await row(page, unicode).getByRole('button', { name: 'Edit', exact: true }).click();
+  const initial = await page.getByLabel('File text').inputValue();
+  const fingerprint = text => require('node:crypto').createHash('sha256').update(text).digest('hex');
   await page.getByLabel('File text').fill('saved ü ñ 文件');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('#files-editor')).toBeHidden();
+  const saved = await page.evaluate(() => window.__calls.find(x => x.cmd === 'file_write_text').args);
+  expect(saved.expectedSha256).toBe(fingerprint(initial));
+  expect(saved).not.toHaveProperty('expectedMtime');
   await row(page, unicode).getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByLabel('File text')).toHaveValue('saved ü ñ 文件');
-  await page.evaluate(() => { window.__filesConflict = true; });
+  await page.evaluate(async path => {
+    const target = window.__calls.find(x => x.cmd === 'file_read_text').args.target;
+    const current = await window.__TAURI__.core.invoke('file_read_text', { target, path });
+    await window.__TAURI__.core.invoke('file_write_text', { target, path, text: 'server changed!!', expectedSha256: current.sha256 });
+  }, '/' + unicode);
   await page.getByLabel('File text').fill('keep my edit');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.locator('#files-editor-error')).toContainText('changed');
+  await expect(page.locator('#files-editor-error')).toContainText('changed on the server');
+  await expect(page.locator('#files-editor-error')).toHaveClass(/files-conflict/);
+  const stale = await page.evaluate(() => window.__calls.filter(x => x.cmd === 'file_write_text').at(-1).args);
+  expect(stale.expectedSha256).toBe(fingerprint('saved ü ñ 文件'));
   await expect(page.getByLabel('File text')).toHaveValue('keep my edit');
   await page.getByRole('button', { name: 'Cancel editing' }).click();
 });

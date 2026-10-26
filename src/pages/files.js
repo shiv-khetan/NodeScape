@@ -194,7 +194,7 @@ export function mount(el) {
       const editor = model.editor;
       button.disabled = true;
       try {
-        await backend.fileWriteText(model.target, editor.path, editor.text, editor.mtime);
+        await backend.fileWriteText(model.target, editor.path, editor.text, editor.sha256);
         if (valid() && editor === model.editor) { model.editor = null; drawEditor(); await list(); }
       } catch (err) {
         if (valid() && editor === model.editor) {
