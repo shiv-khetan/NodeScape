@@ -29,7 +29,7 @@ const SNAPSHOT = [
   // 16 GiB total, 12 GiB available → 4 GiB (25%) used
   `Mem: ${16 * GiB} ${4 * GiB} ${4 * GiB} 0 ${8 * GiB} ${12 * GiB}`,
   `Swap: ${2 * GiB} 0 ${2 * GiB}`,
-  '@disk', `/ ${100 * GiB} ${50 * GiB}`,
+  '@disk', `${100 * GiB} ${50 * GiB} /`,
   '@net', 'lo UNKNOWN 127.0.0.1/8', 'eth0 UP 10.0.0.2/24', 'tailscale0 UNKNOWN 100.64.0.2/32', 'docker0 DOWN 172.17.0.1/16',
   '@svc',
   'nginx.service loaded active running Web server',

@@ -1,19 +1,20 @@
 import { state } from '../state.js';
 import { esc, head, stat, segTabs, ICON } from '../ui/dom.js';
-import { parseLog, isErr } from '../ui/parse.js';
+import { parseLog, isErr, journalLimited } from '../ui/parse.js';
 
 export function render(txt) {
   const { host, logUnit, logLines } = state;
   // Keep only real entries: drops journalctl's "Hint:" notice, "-- Boot … --" separators and "-- No entries --".
   const lines = txt.split('\n').filter(l => /^\d{4}-\d\d-\d\dT/.test(l));
-  const limited = /not seeing messages from other users/.test(txt);
+  const limited = journalLimited(state.snap?.groups, txt);
+  const access = state.snap?.groups?.length ? "Only this user's journal is visible" : `Only <b>${esc(host)}</b>'s own user journal is visible`;
   const errs = lines.filter(isErr).length;
   return head('Logs', logUnit ? esc(logUnit) : 'all units', `
     <input class="field" id="logunit" placeholder="Unit, e.g. nginx (blank = all)" value="${esc(logUnit)}">
     ${segTabs('lines', logLines, [[100, '100'], [300, '300'], [1000, '1000']])}
     <button class="round dark" data-act="refresh" title="Load">${ICON.refresh}</button>`) + `
   <section class="grid">
-    ${limited ? `<article class="card full notice">Only <b>${esc(host)}</b>'s own user journal is visible. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</article>` : ''}
+    ${limited ? `<article class="card full notice">${access}. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</article>` : ''}
     <article class="card full"><div class="stats">${stat('Lines', lines.length, true)}${stat('Errors', errs)}${stat('From', lines.length ? esc(parseLog(lines[0]).time) : '—')}${stat('To', lines.length ? esc(parseLog(lines.at(-1)).time) : '—')}</div></article>
     <article class="card full"><div class="loglist">${lines.map(l => {
       const e = parseLog(l);

@@ -3,9 +3,20 @@ import { avg, agoLabel } from './dom.js';
 // Step-line area chart (the "Retention" card); values are 0-100 percentages sampled every 5s.
 export function stepChart(vals) {
   if (vals.length < 2) return '<p class="muted">Collecting samples…</p>';
-  const W = 300, H = 170, n = vals.length, top = Math.max(...vals);
+  const valid = vals.filter(Number.isFinite);
+  if (!valid.length) return '<p class="unavailable">CPU history unavailable</p>';
+  const W = 300, H = 170, n = vals.length, top = Math.max(...valid);
   const max = Math.max(top, 10) * 1.2, x = i => (i / n) * W, y = v => H - (v / max) * H;
-  const d = `M0 ${y(vals[0]).toFixed(1)}` + vals.map((v, i) => ` V${y(v).toFixed(1)} H${x(i + 1).toFixed(1)}`).join('');
+  const segments = [];
+  vals.forEach((v, i) => {
+    if (!Number.isFinite(v)) return;
+    if (!Number.isFinite(vals[i - 1])) segments.push({ start: x(i), end: x(i + 1), d: `M${x(i).toFixed(1)} ${y(v).toFixed(1)}` });
+    const segment = segments.at(-1);
+    segment.d += ` V${y(v).toFixed(1)} H${x(i + 1).toFixed(1)}`;
+    segment.end = x(i + 1);
+  });
+  const d = segments.map(s => s.d).join(' ');
+  const area = segments.map(s => `${s.d} V${H} H${s.start.toFixed(1)}Z`).join(' ');
   const pk = vals.indexOf(top), px = ((x(pk) + x(pk + 1)) / 2 / W) * 100, py = (y(top) / H) * 100;
   const labels = [0, 1, 2, 3].map(k => Math.round(((n - 1) * (3 - k) * 5) / 3));
   return `<div class="step">
@@ -14,7 +25,7 @@ export function stepChart(vals) {
         <pattern id="vl" width="5" height="10" patternUnits="userSpaceOnUse"><path d="M2 0V10" stroke="#f472b6" stroke-opacity=".3" stroke-width="1.5"/></pattern>
         <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".2" stop-color="#f8f9fb" stop-opacity="0"/><stop offset="1" stop-color="#f8f9fb"/></linearGradient>
       </defs>
-      <path d="${d} V${H} H0Z" fill="url(#vl)"/>
+      <path d="${area}" fill="url(#vl)"/>
       <rect width="${W}" height="${H}" fill="url(#fade)"/>
       <path d="${d}" stroke="#ec4899" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
     </svg>
@@ -27,18 +38,20 @@ export function stepChart(vals) {
 // Dot-matrix columns (the "Transactions" card): each sample is a 2-wide stack of 1–4 rows.
 export function dots(vals, cls, fmt) {
   if (!vals.length) return '<div class="dots"></div>';
-  const max = Math.max(...vals) || 1, pk = vals.indexOf(Math.max(...vals));
-  return `<div class="dots ${cls}">${vals.map((v, i) => `<div class="${i === pk ? 'pk' : ''}">${i === pk ? `<span class="tip">Peak: <b>${fmt(v)}</b></span>` : ''}${'<i></i>'.repeat(2 * Math.max(1, Math.ceil((v / max) * 4)))}</div>`).join('')}</div>`;
+  const max = Math.max(...vals.filter(Number.isFinite)) || 1, pk = vals.indexOf(max);
+  return `<div class="dots ${cls}">${vals.map((v, i) => !Number.isFinite(v) ? '<div class="empty"></div>' : `<div class="${i === pk ? 'pk' : ''}">${i === pk ? `<span class="tip">Peak: <b>${fmt(v)}</b></span>` : ''}${'<i></i>'.repeat(2 * Math.max(1, Math.ceil((v / max) * 4)))}</div>`).join('')}</div>`;
 }
 
 export function dotCard(title, vals, now, cls, fmt) {
-  const diff = now - avg(vals), [n, unit] = fmt(now).split(' ');
+  const valid = vals.filter(Number.isFinite);
+  const diff = Number.isFinite(now) && valid.length ? now - avg(valid) : null;
+  const [n, unit] = Number.isFinite(now) ? fmt(now).split(' ') : ['Unavailable', ''];
   return `<article class="card dotcard">
     <div class="card-top"><h2>${title}</h2><span class="muted">last ${vals.length} samples</span></div>
     <div class="dotrow">
       <b class="huge">${n}<small>${unit || ''}</small></b>
       ${dots(vals, cls, fmt)}
-      <div class="vs"><span class="muted">vs average</span><b>${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff))}</b></div>
+      <div class="vs"><span class="muted">vs average</span><b>${diff === null ? 'Unavailable' : (diff >= 0 ? '+' : '−') + fmt(Math.abs(diff))}</b></div>
     </div>
   </article>`;
 }
@@ -53,6 +66,7 @@ export function bars(samples) {
 }
 
 export function gauge(loadPct, load, cpus) {
+  if (![loadPct, load, cpus].every(Number.isFinite)) return '<p class="unavailable">Load unavailable</p>';
   const C = 2 * Math.PI * 70;
   return `<div class="gauge">
         <svg viewBox="0 0 168 168">

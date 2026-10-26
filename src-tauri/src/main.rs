@@ -26,7 +26,19 @@ echo @uptime; cat /proc/uptime
 echo @load; cat /proc/loadavg
 echo @cpus; nproc
 echo @mem; free -b
-echo @disk; df -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs --output=target,size,used 2>/dev/null | tail -n +2
+echo @disk; df -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs --output=size,used,target 2>/dev/null | tail -n +2
+echo @temps
+if command -v sensors >/dev/null 2>&1; then
+    sensors -j 2>/dev/null
+else
+    for zone in /sys/class/thermal/thermal_zone*; do
+        [ -r "$zone/type" ] && [ -r "$zone/temp" ] || continue
+        label=$(cat "$zone/type" 2>/dev/null)
+        temp=$(cat "$zone/temp" 2>/dev/null)
+        [ -n "$label" ] && [ -n "$temp" ] && printf '%s\n%s\n' "$label" "$temp"
+    done
+fi
+echo @groups; id -nG
 echo @net; ip -br addr 2>/dev/null
 echo @svc; systemctl list-units --type=service --all --no-legend --plain --no-pager 2>/dev/null
 echo @log; journalctl -q -n 12 --no-pager -o short-iso 2>/dev/null
@@ -178,6 +190,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapshot_includes_system_sections() {
+        assert!(SNAPSHOT.contains("echo @temps"));
+        assert!(SNAPSHOT.contains("sensors -j 2>/dev/null"));
+        assert!(SNAPSHOT.contains("/sys/class/thermal/thermal_zone*"));
+        assert!(SNAPSHOT.contains("echo @groups; id -nG"));
+        assert!(SNAPSHOT.contains("--output=size,used,target"));
+    }
 
     #[test]
     fn validation() {
