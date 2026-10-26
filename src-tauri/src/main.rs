@@ -1,14 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod contracts;
+// P05 consumes effective config inspection.
+#[allow(dead_code)]
+mod ssh_config;
+mod transport;
 
-use contracts::{classify_ssh_failure, valid_host, valid_unit, AppError, ErrorKind, Target};
-use std::io::{ErrorKind as IoErrorKind, Write};
+use contracts::{valid_unit, AppError, ErrorKind, Target};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-
-// ponytail: shells out to the system `ssh`, so ssh config files, keys, known_hosts and ssh-agent just work.
-// No agent on the server; swap for the `russh` crate if we ever need password auth or a pooled session.
 
 // CPU and network are sampled first, before the script prints anything, so the app's own SSH output
 // doesn't show up as network traffic.
@@ -53,68 +52,22 @@ fn config_path(config: &Option<String>) -> Result<Option<PathBuf>, AppError> {
     }
 }
 
-/// Runs `script` on `host` through `sh -s` (script on stdin, so no remote quoting issues).
-fn ssh(host: &str, config: &Option<String>, script: &str) -> Result<String, AppError> {
-    if !valid_host(host) {
-        return Err(AppError::new(
-            ErrorKind::InvalidInput,
-            "Invalid host. Use an ssh config alias or user@host.",
-        ));
-    }
-    let mut cmd = Command::new("ssh");
-    if let Some(cfg) = config_path(config)? {
-        cmd.arg("-F").arg(cfg);
-    }
-    // No StrictHostKeyChecking override: with BatchMode ssh refuses unknown or changed host keys,
-    // and whatever the config says (e.g. HostKeyAlias) still applies.
-    cmd.args([
-        "-T",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=5",
-        "--",
-        host,
-        "sh -s",
-    ])
-    .stdin(Stdio::piped())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flash per call
-    }
-    let mut child = cmd.spawn().map_err(|e| {
-        let kind = if e.kind() == IoErrorKind::NotFound {
-            ErrorKind::SshMissing
-        } else {
-            ErrorKind::Internal
-        };
-        AppError::new(kind, format!("Could not start ssh: {e}"))
-    })?;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(script.as_bytes())
-        .map_err(|e| AppError::new(ErrorKind::Internal, e.to_string()))?;
-    let out = child
-        .wait_with_output()
-        .map_err(|e| AppError::new(ErrorKind::Internal, e.to_string()))?;
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    if out.status.success() {
-        return Ok(stdout);
-    }
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    Err(classify_ssh_failure(&stderr, &stdout, out.status.code()))
+async fn run(
+    host: String,
+    config: Option<String>,
+    script: String,
+    operation_id: Option<String>,
+) -> Result<String, AppError> {
+    let opts = transport::RunOpts {
+        operation_id,
+        ..Default::default()
+    };
+    transport::run(&Target { host, config }, &script, opts).await
 }
 
-async fn run(host: String, config: Option<String>, script: String) -> Result<String, AppError> {
-    let target = Target { host, config };
-    tauri::async_runtime::spawn_blocking(move || ssh(&target.host, &target.config, &script))
-        .await
-        .map_err(|e| AppError::new(ErrorKind::Internal, e.to_string()))?
+#[tauri::command]
+async fn operation_cancel(id: String) -> Result<bool, AppError> {
+    transport::operation_cancel(&id).await
 }
 
 fn parse_hosts(cfg: &str) -> Vec<String> {
@@ -141,14 +94,19 @@ fn hosts(config: Option<String>) -> Vec<String> {
 }
 
 #[tauri::command]
-async fn query(host: String, what: String, config: Option<String>) -> Result<String, AppError> {
+async fn query(
+    host: String,
+    what: String,
+    config: Option<String>,
+    operation_id: Option<String>,
+) -> Result<String, AppError> {
     let script = match what.as_str() {
         "snapshot" => SNAPSHOT,
         "processes" => PROCESSES,
         "timers" => TIMERS,
         _ => return Err(AppError::new(ErrorKind::InvalidInput, "unknown query")),
     };
-    run(host, config, script.into()).await
+    run(host, config, script.into(), operation_id).await
 }
 
 #[tauri::command]
@@ -157,6 +115,7 @@ async fn logs(
     unit: Option<String>,
     lines: u32,
     config: Option<String>,
+    operation_id: Option<String>,
 ) -> Result<String, AppError> {
     let unit = match unit.filter(|u| !u.is_empty()) {
         Some(u) if valid_unit(&u) => format!("-u {u}"),
@@ -170,6 +129,7 @@ async fn logs(
             "journalctl -n {} --no-pager -o short-iso {unit} 2>&1",
             lines.clamp(1, 5000)
         ),
+        operation_id,
     )
     .await
 }
@@ -180,6 +140,7 @@ async fn service_action(
     unit: String,
     action: String,
     config: Option<String>,
+    operation_id: Option<String>,
 ) -> Result<String, AppError> {
     if !["start", "stop", "restart", "enable", "disable"].contains(&action.as_str())
         || !valid_unit(&unit)
@@ -194,13 +155,20 @@ async fn service_action(
         host,
         config,
         format!("sudo -n systemctl {action} -- {unit} 2>&1 && echo ok"),
+        operation_id,
     )
     .await
 }
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![hosts, query, logs, service_action])
+        .invoke_handler(tauri::generate_handler![
+            hosts,
+            query,
+            logs,
+            service_action,
+            operation_cancel
+        ])
         .run(tauri::generate_context!())
         .expect("error while running NodeScape");
 }
