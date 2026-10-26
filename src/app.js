@@ -363,8 +363,8 @@ async function refresh(fromTimer) {
     const list = main.querySelector('.loglist');
     if (view === 'logs' && list) list.scrollTop = list.scrollHeight;
   } catch (e) {
-    const hostKey = /Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|No .* host key is known/i.test(e);
-    if (id === seq) main.innerHTML = `<div class="empty"><h1>Can't reach ${esc(host)}</h1><p class="error">${esc(e)}</p>
+    const hostKey = e?.kind === 'host_key_unknown' || e?.kind === 'host_key_changed';
+    if (id === seq) main.innerHTML = `<div class="empty"><h1>Can't reach ${esc(host)}</h1><p class="error">${esc(e?.message ?? String(e))}</p>
       <p>${hostKey
         ? `The server's host key isn't trusted yet, or it changed. NodeScape never accepts host keys on its own: connect once with <code>ssh ${esc(host)}</code> in a terminal and check the fingerprint.`
         : `Check that <code>ssh ${esc(host)}</code> works in a terminal without a password prompt.`}</p></div>`;
@@ -428,7 +428,7 @@ main.addEventListener('click', async e => {
       toast(`${action} ${unit}: ok`);
       refresh();
     } catch (err) {
-      toast(String(err).includes('password') ? 'sudo needs a password — allow passwordless systemctl for this user' : String(err));
+      toast(err?.kind === 'sudo_required' ? 'sudo needs a password — allow passwordless systemctl for this user' : (err?.message ?? String(err)));
     }
   }
 });

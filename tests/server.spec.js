@@ -87,13 +87,18 @@ test('processes page parses ps output', async ({ page }) => {
 });
 
 test('unknown host key shows how to trust it safely', async ({ page }) => {
-  await openServer(page, { snapshot: { error: 'Host key verification failed.' } });
+  await openServer(page, { snapshot: { error: { kind: 'host_key_unknown', message: 'Trust check rejected the connection.' } } });
   await expect(page.locator('.empty h1')).toHaveText("Can't reach testbox");
   await expect(page.locator('.empty')).toContainText("host key isn't trusted yet");
+  await expect(page.locator('.error')).toHaveText('Trust check rejected the connection.');
+  const changed = await page.context().newPage();
+  await openServer(changed, { snapshot: { error: { kind: 'host_key_changed', message: 'The key differs.' } } });
+  await expect(changed.locator('.empty')).toContainText("host key isn't trusted yet");
+  await changed.close();
 });
 
 test('other connection errors show the ssh message', async ({ page }) => {
-  await openServer(page, { snapshot: { error: 'ssh: connect to host 10.0.0.2 port 22: Connection timed out' } });
+  await openServer(page, { snapshot: { error: { kind: 'timeout', message: 'ssh: connect to host 10.0.0.2 port 22: Connection timed out' } } });
   await expect(page.locator('.error')).toContainText('Connection timed out');
   await expect(page.locator('.empty')).toContainText('works in a terminal');
 });
@@ -135,7 +140,7 @@ test('stopping a service asks first and sends the exact unit', async ({ page }) 
 });
 
 test('sudo password errors get a readable message', async ({ page }) => {
-  await openServer(page, { snapshot: F.SNAPSHOT, service_action: { error: 'sudo: a password is required' } });
+  await openServer(page, { snapshot: F.SNAPSHOT, service_action: { error: { kind: 'sudo_required', message: 'Elevation is required.' } } });
   await nav(page, 'Services');
   await page.locator('[data-svc="start"][data-u="backup.service"]').click();
   await expect(page.locator('#toast')).toContainText('sudo needs a password');

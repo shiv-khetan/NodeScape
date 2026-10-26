@@ -17,7 +17,7 @@ async function openDemo(page) {
 
 // Opens the app against a fake Tauri backend. `responses` maps a query name
 // (snapshot/processes/timers) or command (logs/hosts/service_action) to the raw
-// text the server would send, or to { error } to make the call fail.
+// text the server would send, or to { error: { kind, message } } to fail.
 // Every call is recorded in window.__calls.
 async function openServer(page, responses) {
   await offline(page);
@@ -29,7 +29,7 @@ async function openServer(page, responses) {
         invoke: async (cmd, args) => {
           window.__calls.push({ cmd, args });
           const v = r[cmd === 'query' ? args.what : cmd];
-          if (v && v.error) throw v.error;
+          if (v && v.error) throw { kind: v.error.kind, message: v.error.message };
           return v ?? (cmd === 'hosts' ? [] : '');
         },
       },

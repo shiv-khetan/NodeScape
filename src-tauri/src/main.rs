@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::io::Write;
+mod contracts;
+
+use contracts::{classify_ssh_failure, valid_host, valid_unit, AppError, ErrorKind, Target};
+use std::io::{ErrorKind as IoErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -38,28 +41,25 @@ echo @timers; systemctl show '*.timer' --no-pager -p Id -p Unit -p ActiveState -
 echo @cron; crontab -l 2>/dev/null | grep -v '^#' || true
 "#;
 
-fn valid_host(h: &str) -> bool {
-    // '%' allows IPv6 link-local zones like fe80::1%14.
-    !h.is_empty() && !h.starts_with('-') && h.chars().all(|c| c.is_ascii_alphanumeric() || "@._-:%".contains(c))
-}
-
-fn valid_unit(u: &str) -> bool {
-    !u.is_empty() && !u.starts_with('-') && u.chars().all(|c| c.is_ascii_alphanumeric() || "@._:-".contains(c))
-}
-
 /// The ssh config to use: the one picked in Settings, else ~/.ssh/config (ssh's own default).
-fn config_path(config: &Option<String>) -> Result<Option<PathBuf>, String> {
+fn config_path(config: &Option<String>) -> Result<Option<PathBuf>, AppError> {
     match config.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
         Some(c) if Path::new(c).is_file() => Ok(Some(PathBuf::from(c))),
-        Some(c) => Err(format!("SSH config file not found: {c}")),
+        Some(c) => Err(AppError::new(
+            ErrorKind::InvalidInput,
+            format!("SSH config file not found: {c}"),
+        )),
         None => Ok(None),
     }
 }
 
 /// Runs `script` on `host` through `sh -s` (script on stdin, so no remote quoting issues).
-fn ssh(host: &str, config: &Option<String>, script: &str) -> Result<String, String> {
+fn ssh(host: &str, config: &Option<String>, script: &str) -> Result<String, AppError> {
     if !valid_host(host) {
-        return Err("Invalid host. Use an ssh config alias or user@host.".into());
+        return Err(AppError::new(
+            ErrorKind::InvalidInput,
+            "Invalid host. Use an ssh config alias or user@host.",
+        ));
     }
     let mut cmd = Command::new("ssh");
     if let Some(cfg) = config_path(config)? {
@@ -67,28 +67,54 @@ fn ssh(host: &str, config: &Option<String>, script: &str) -> Result<String, Stri
     }
     // No StrictHostKeyChecking override: with BatchMode ssh refuses unknown or changed host keys,
     // and whatever the config says (e.g. HostKeyAlias) still applies.
-    cmd.args(["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", host, "sh -s"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args([
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "--",
+        host,
+        "sh -s",
+    ])
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flash per call
     }
-    let mut child = cmd.spawn().map_err(|e| format!("Could not start ssh: {e}"))?;
-    child.stdin.take().unwrap().write_all(script.as_bytes()).map_err(|e| e.to_string())?;
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    let mut child = cmd.spawn().map_err(|e| {
+        let kind = if e.kind() == IoErrorKind::NotFound {
+            ErrorKind::SshMissing
+        } else {
+            ErrorKind::Internal
+        };
+        AppError::new(kind, format!("Could not start ssh: {e}"))
+    })?;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .map_err(|e| AppError::new(ErrorKind::Internal, e.to_string()))?;
+    let out = child
+        .wait_with_output()
+        .map_err(|e| AppError::new(ErrorKind::Internal, e.to_string()))?;
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     if out.status.success() {
         return Ok(stdout);
     }
-    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    Err(if !stderr.is_empty() { stderr } else if !stdout.trim().is_empty() { stdout } else { format!("ssh exited with {}", out.status) })
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    Err(classify_ssh_failure(&stderr, &stdout, out.status.code()))
 }
 
-async fn run(host: String, config: Option<String>, script: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || ssh(&host, &config, &script)).await.map_err(|e| e.to_string())?
+async fn run(host: String, config: Option<String>, script: String) -> Result<String, AppError> {
+    let target = Target { host, config };
+    tauri::async_runtime::spawn_blocking(move || ssh(&target.host, &target.config, &script))
+        .await
+        .map_err(|e| AppError::new(ErrorKind::Internal, e.to_string()))?
 }
 
 fn parse_hosts(cfg: &str) -> Vec<String> {
@@ -106,40 +132,70 @@ fn parse_hosts(cfg: &str) -> Vec<String> {
 #[tauri::command]
 fn hosts(config: Option<String>) -> Vec<String> {
     let path = config_path(&config).ok().flatten().unwrap_or_else(|| {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).unwrap_or_default();
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .unwrap_or_default();
         Path::new(&home).join(".ssh").join("config")
     });
     parse_hosts(&std::fs::read_to_string(path).unwrap_or_default())
 }
 
 #[tauri::command]
-async fn query(host: String, what: String, config: Option<String>) -> Result<String, String> {
+async fn query(host: String, what: String, config: Option<String>) -> Result<String, AppError> {
     let script = match what.as_str() {
         "snapshot" => SNAPSHOT,
         "processes" => PROCESSES,
         "timers" => TIMERS,
-        _ => return Err("unknown query".into()),
+        _ => return Err(AppError::new(ErrorKind::InvalidInput, "unknown query")),
     };
     run(host, config, script.into()).await
 }
 
 #[tauri::command]
-async fn logs(host: String, unit: Option<String>, lines: u32, config: Option<String>) -> Result<String, String> {
+async fn logs(
+    host: String,
+    unit: Option<String>,
+    lines: u32,
+    config: Option<String>,
+) -> Result<String, AppError> {
     let unit = match unit.filter(|u| !u.is_empty()) {
         Some(u) if valid_unit(&u) => format!("-u {u}"),
-        Some(_) => return Err("Invalid unit name".into()),
+        Some(_) => return Err(AppError::new(ErrorKind::InvalidInput, "Invalid unit name")),
         None => String::new(),
     };
-    run(host, config, format!("journalctl -n {} --no-pager -o short-iso {unit} 2>&1", lines.clamp(1, 5000))).await
+    run(
+        host,
+        config,
+        format!(
+            "journalctl -n {} --no-pager -o short-iso {unit} 2>&1",
+            lines.clamp(1, 5000)
+        ),
+    )
+    .await
 }
 
 #[tauri::command]
-async fn service_action(host: String, unit: String, action: String, config: Option<String>) -> Result<String, String> {
-    if !["start", "stop", "restart", "enable", "disable"].contains(&action.as_str()) || !valid_unit(&unit) {
-        return Err("Refused: unknown action or invalid unit name".into());
+async fn service_action(
+    host: String,
+    unit: String,
+    action: String,
+    config: Option<String>,
+) -> Result<String, AppError> {
+    if !["start", "stop", "restart", "enable", "disable"].contains(&action.as_str())
+        || !valid_unit(&unit)
+    {
+        return Err(AppError::new(
+            ErrorKind::InvalidInput,
+            "Refused: unknown action or invalid unit name",
+        ));
     }
     // sudo -n never prompts: fails fast unless the user allowed passwordless systemctl in sudoers.
-    run(host, config, format!("sudo -n systemctl {action} -- {unit} 2>&1 && echo ok")).await
+    run(
+        host,
+        config,
+        format!("sudo -n systemctl {action} -- {unit} 2>&1 && echo ok"),
+    )
+    .await
 }
 
 fn main() {
@@ -155,14 +211,16 @@ mod tests {
 
     #[test]
     fn validation() {
-        assert!(valid_host("pi@nas.local") && valid_host("nas") && valid_host("fe80::1%14"));
-        assert!(!valid_host("-oProxyCommand=calc") && !valid_host("a b") && !valid_host(""));
-        assert!(valid_unit("nginx.service") && valid_unit("getty@tty1.service"));
-        assert!(!valid_unit("x;rm -rf /") && !valid_unit("-x") && !valid_unit("a$(id)"));
-        assert_eq!(parse_hosts("Host nas pi\n  HostName 10.0.0.2\nHost *\nhost box"), ["nas", "pi", "box"]);
+        assert_eq!(
+            parse_hosts("Host nas pi\n  HostName 10.0.0.2\nHost *\nhost box"),
+            ["nas", "pi", "box"]
+        );
         assert_eq!(config_path(&None), Ok(None));
         assert_eq!(config_path(&Some("  ".into())), Ok(None));
         assert!(config_path(&Some("Z:/no/such/config".into())).is_err());
-        assert_eq!(config_path(&Some("Cargo.toml".into())), Ok(Some(PathBuf::from("Cargo.toml"))));
+        assert_eq!(
+            config_path(&Some("Cargo.toml".into())),
+            Ok(Some(PathBuf::from("Cargo.toml")))
+        );
     }
 }
