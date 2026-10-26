@@ -110,6 +110,14 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
       if (result?.error) throw result.error;
       return result ?? (cmd === 'hosts' ? [] : '');
     }
+    if (cmd === 'network_read') return {
+  interfaces: [{ ifname: 'eth0', operstate: 'UP', addr_info: [{local:'192.0.2.2',prefixlen:24},{local:'2001:db8::2',prefixlen:64}] }, {ifname:'down0',operstate:'DOWN',addr_info:[]}],
+  routes4: [{dst:'default',gateway:'192.0.2.1',dev:'eth0',metric:100},{dst:'default',gateway:'192.0.2.3',dev:'eth0',metric:200}],
+  routes6: [{dst:'default',gateway:'fe80::1',dev:'eth0'},{dst:'2001:db8::/64',dev:'eth0'}],
+  ports: [{protocol:'tcp',state:'LISTEN',local:'[::]:22',peer:'[::]:*',process:'sshd'},{protocol:'udp',state:'UNCONN',local:'0.0.0.0:53',peer:'0.0.0.0:*',process:''}],
+  firewall: {ufw:'inactive',nftables:'active',firewalld:'inactive',firewalldState:'not running'},
+  tailscale: {Self:{HostName:'selfbox',TailscaleIPs:['100.64.0.1'],Online:true,OS:'linux'},peers:[{HostName:'peerbox',TailscaleIPs:['fd7a::2'],Online:true,OS:'linux',LastSeen:'2026-10-01'},{HostName:'sleepbox',TailscaleIPs:[],Online:false,OS:'linux'}]}
+};
     if (cmd === 'hosts') return ['nas-01', 'testbox'];
     if (cmd === 'cancel') return null;
     if (cmd === 'logs') return logs(args);

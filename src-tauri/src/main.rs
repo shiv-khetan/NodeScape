@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod contracts;
+mod network;
 // P05 consumes effective config inspection.
 #[allow(dead_code)]
 mod ssh_config;
@@ -163,6 +164,7 @@ async fn service_action(
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            network::network_read,
             hosts,
             query,
             logs,

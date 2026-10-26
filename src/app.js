@@ -6,10 +6,12 @@ import * as overview from './pages/overview.js';
 import * as services from './pages/services.js';
 import * as processes from './pages/processes.js';
 import * as logs from './pages/logs.js';
+import * as network from './pages/network.js';
 import * as scheduled from './pages/scheduled.js';
 
 const main = $('#main'), hostInput = $('#host');
 const routes = {
+  network: { page: network, load: target => backend.networkRead(target) },
   overview: { page: overview, load: target => backend.query(target, 'snapshot'), snapshot: true },
   services: { page: services, load: target => backend.query(target, 'snapshot'), snapshot: true },
   processes: { page: processes, load: target => backend.query(target, 'processes') },

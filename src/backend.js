@@ -25,3 +25,6 @@ export const serviceAction = (target, unit, action) => invoke('service_action', 
 export const hosts = (config = null) => invoke('hosts', { config });
 /** @param {string} id @returns {Promise<void>} */
 export const cancel = id => invoke('operation_cancel', { id });
+
+/** Read-only network inspection. */
+export const networkRead = target => invoke('network_read', { target });
