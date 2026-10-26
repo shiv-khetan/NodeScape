@@ -1,4 +1,4 @@
-// End-to-end flows in demo mode (the built-in fake server).
+// End-to-end flows in the test-only fake desktop backend.
 const { test, expect } = require('@playwright/test');
 const { openDemo, nav } = require('./helpers');
 

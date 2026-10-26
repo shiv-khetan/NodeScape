@@ -1,43 +1,27 @@
-const path = require('path');
-const { pathToFileURL } = require('url');
+const fs = require('node:fs');
+const path = require('node:path');
 const { expect } = require('@playwright/test');
+const APP = 'http://127.0.0.1:4174/';
+const fixture = fs.readFileSync(path.join(__dirname, 'fixtures/demo-backend.js'), 'utf8');
 
-const APP = pathToFileURL(path.join(__dirname, '..', 'src', 'index.html')).href;
-
-// The app ships everything it needs; block the network so no test can depend on it.
 async function offline(page) {
-  await page.route(/^https?:/, r => r.abort());
+  await page.route(/^https?:/, route => new URL(route.request().url()).origin === new URL(APP).origin ? route.continue() : route.abort());
 }
-
-async function openDemo(page) {
+async function installBackend(page, options = {}) {
   await offline(page);
+  await page.addInitScript({ content: fixture + '\nwindow.installDemoBackend(' + JSON.stringify(options) + ');' });
+}
+async function openDemo(page) {
+  await installBackend(page);
   await page.goto(APP);
   await expect(page.locator('.hero h1')).toHaveText('Overview');
+  // Collect genuine fixture samples so chart assertions cover populated charts.
+  await page.locator('#refresh').click();
+  await expect(page.locator('.step svg')).toBeVisible();
 }
-
-// Opens the app against a fake Tauri backend. `responses` maps a query name
-// (snapshot/processes/timers) or command (logs/hosts/service_action) to the raw
-// text the server would send, or to { error: { kind, message } } to fail.
-// Every call is recorded in window.__calls.
-async function openServer(page, responses) {
-  await offline(page);
-  await page.addInitScript(r => {
-    if (!localStorage.getItem('host')) localStorage.setItem('host', 'testbox');
-    window.__calls = [];
-    window.__TAURI__ = {
-      core: {
-        invoke: async (cmd, args) => {
-          window.__calls.push({ cmd, args });
-          const v = r[cmd === 'query' ? args.what : cmd];
-          if (v && v.error) throw { kind: v.error.kind, message: v.error.message };
-          return v ?? (cmd === 'hosts' ? [] : '');
-        },
-      },
-    };
-  }, responses);
+async function openServer(page, responses, host = 'testbox') {
+  await installBackend(page, { responses, host });
   await page.goto(APP);
 }
-
 const nav = (page, name) => page.locator('#nav button', { hasText: name }).click();
-
-module.exports = { APP, openDemo, openServer, nav };
+module.exports = { APP, offline, installBackend, openDemo, openServer, nav };

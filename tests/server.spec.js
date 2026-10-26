@@ -114,7 +114,7 @@ test('settings: chosen ssh config is stored and sent with every call', async ({ 
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sshConfig'))).toBe('C:\\path\\to\\ssh\\config');
   await expect.poll(async () => (await calls(page)).filter(c => c.args?.config === 'C:\\path\\to\\ssh\\config').map(c => c.cmd))
     .toEqual(expect.arrayContaining(['hosts', 'query']));
-  await expect.poll(() => page.locator('#hosts option').evaluateAll(o => o.map(x => x.value))).toEqual(['demo', 'alpha', 'beta']);
+  await expect.poll(() => page.locator('#hosts option').evaluateAll(o => o.map(x => x.value))).toEqual(['alpha', 'beta']);
 });
 
 test('settings: cancel leaves the config unchanged', async ({ page }) => {
