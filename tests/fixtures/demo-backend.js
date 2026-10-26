@@ -102,8 +102,46 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     return (hit.length ? hit : [`-- No entries for ${unit} --`]).slice(-lines).join('\n');
   }
 
-  window.__TAURI__ = { core: { invoke: async (cmd, args = {}) => {
+  const terminalSessions = new Map();
+  let terminalNext = 0;
+  class FakeChannel { constructor(onmessage) { this.onmessage = onmessage; } }
+  window.__terminalEmit = (id, text) => {
+    const session = terminalSessions.get(id);
+    if (!session) return;
+    const data = Array.from(new TextEncoder().encode(text));
+    session.unacked += data.length;
+    session.channel.onmessage({ kind: 'output', id, host: session.host, data });
+  };
+  window.__terminalExit = (id, code = 0) => {
+    const session = terminalSessions.get(id);
+    if (session) session.channel.onmessage({ kind: 'exit', id, host: session.host, code, error: null });
+  };
+  async function terminalCommand(cmd, args) {
+    const response = responses?.[cmd];
+    if (response?.defer) await new Promise(resolve => window.__pending.push(resolve));
+    const result = response?.defer ? response.value : response;
+    if (result?.error) throw result.error;
+    if (cmd === 'terminal_open') {
+      const id = 'terminal-' + ++terminalNext;
+      terminalSessions.set(id, { channel: args.channel, host: args.target.host, unacked: 0 });
+      window.__terminalEmit(id, 'Connected to ' + args.target.host + '\r\n$ ');
+      return id;
+    }
+    if (cmd === 'terminal_close') { window.__terminalExit(args.id); terminalSessions.delete(args.id); return null; }
+    const session = terminalSessions.get(args.id);
+    if (!session) throw { kind: 'not_found', message: 'Terminal session is closed' };
+    if (cmd === 'terminal_input') { window.__terminalEmit(args.id, args.data.replace(/\r/g, '\r\n$ ')); return null; }
+    if (cmd === 'terminal_resize') return null;
+    if (cmd === 'terminal_ack') {
+      if (args.bytes <= 0 || args.bytes > session.unacked) throw { kind: 'invalid_input', message: 'Invalid terminal acknowledgement' };
+      session.unacked -= args.bytes;
+      return null;
+    }
+    throw { kind: 'invalid_input', message: 'Unknown terminal command' };
+  }
+  window.__TAURI__ = { core: { Channel: FakeChannel, invoke: async (cmd, args = {}) => {
     window.__calls.push({ cmd, args: cmd === 'service_action' && args.password != null ? { ...args, password: '[redacted]' } : args });
+    if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
       const supplied = responses[args.host + ':' + key] ?? responses[key];

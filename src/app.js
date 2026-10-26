@@ -8,10 +8,12 @@ import * as processes from './pages/processes.js';
 import * as logs from './pages/logs.js';
 import * as network from './pages/network.js';
 import * as scheduled from './pages/scheduled.js';
+import * as terminal from './pages/terminal.js';
 
 const main = $('#main'), hostInput = $('#host');
 const routes = {
   network: { page: network, load: target => backend.networkRead(target) },
+  terminal: { page: terminal, load: async () => '' },
   overview: { page: overview, load: target => backend.query(target, 'snapshot'), snapshot: true },
   services: { page: services, load: target => backend.query(target, 'snapshot'), snapshot: true },
   processes: { page: processes, load: target => backend.query(target, 'processes') },
@@ -23,6 +25,8 @@ function dispose() { mounted?.dispose?.(); mounted = null; }
 
 async function refresh(fromTimer) {
   if (fromTimer === true && state.busy) return;
+  const terminalChanged = terminal.targetChanged();
+  if (state.view === 'terminal' && mounted === terminal && !terminalChanged) return;
   const request = beginRequest();
   if (!backend.available() || !state.host) {
     dispose();

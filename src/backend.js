@@ -28,3 +28,14 @@ export const cancel = id => invoke('operation_cancel', { id });
 
 /** Read-only network inspection. */
 export const networkRead = target => invoke('network_read', { target });
+// Channels stay in the adapter along with all other desktop IPC.
+export function terminalChannel(onmessage) {
+  const Channel = window.__TAURI__?.core?.Channel;
+  if (!Channel) throw { kind: 'internal', message: 'Terminal channels require the desktop app' };
+  return new Channel(onmessage);
+}
+export const terminalOpen = (target, cols, rows, channel) => invoke('terminal_open', { target, cols, rows, channel });
+export const terminalInput = (id, data) => invoke('terminal_input', { id, data });
+export const terminalResize = (id, cols, rows) => invoke('terminal_resize', { id, cols, rows });
+export const terminalAck = (id, bytes) => invoke('terminal_ack', { id, bytes });
+export const terminalClose = id => invoke('terminal_close', { id });

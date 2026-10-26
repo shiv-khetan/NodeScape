@@ -6,6 +6,7 @@ mod network;
 #[allow(dead_code)]
 mod ssh_config;
 mod sudo;
+mod terminal;
 mod transport;
 
 use contracts::{valid_unit, AppError, ErrorKind, Target};
@@ -187,10 +188,20 @@ fn main() {
             query,
             logs,
             service_action,
-            operation_cancel
+            operation_cancel,
+            terminal::terminal_open,
+            terminal::terminal_input,
+            terminal::terminal_resize,
+            terminal::terminal_ack,
+            terminal::terminal_close
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running NodeScape");
+        .build(tauri::generate_context!())
+        .expect("error while building NodeScape")
+        .run(|_, event| {
+            if let tauri::RunEvent::Exit = event {
+                terminal::close_all();
+            }
+        });
 }
 
 #[cfg(test)]
