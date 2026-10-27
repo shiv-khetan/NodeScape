@@ -25,7 +25,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     ['apt-daily.service', 'Daily apt download activities', 'dead'],
     ['fstrim.service', 'Discard unused blocks on filesystems', 'dead'],
     ['nfs-server.service', 'NFS server and services', 'dead'],
-  ].map(([unit, desc, sub]) => ({ unit, desc, sub }));
+  ].map(([unit, desc, sub]) => ({ unit, desc, sub, enabled: sub === 'running' ? 'enabled' : 'disabled' }));
   const active = u => (u.sub === 'running' ? 'active' : u.sub === 'failed' ? 'failed' : 'inactive');
 
   const msgs = [
@@ -201,13 +201,26 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     fileError('invalid_input', 'Unknown file command');
   }
 
+  const userUnits = [{ unit: 'sync.service', desc: 'Personal sync', sub: 'dead', enabled: 'disabled' }];
+  function servicesFixture(target) {
+    // Older suites supply a snapshot; adapt it only inside this test fixture.
+    const supplied = responses?.[target.host + ':snapshot'] ?? responses?.snapshot;
+    const listed = typeof supplied === 'string' ? supplied.split('@svc\n')[1]?.split('\n@')[0].split('\n').map(line => {
+      const [unit, load, active, sub, ...description] = line.trim().split(/\s+/);
+      return { unit, load, active, sub, desc: description.join(' '), enabled: 'enabled' };
+    }).filter(u => u.unit?.endsWith('.service')) || [] : units;
+    const convert = u => ({ name: u.unit, load: u.load || 'loaded', active: u.active || active(u), sub: u.sub, description: u.desc, enabled: u.enabled });
+    return { system: { units: listed.map(convert) }, user: { available: true, units: userUnits.map(convert) } };
+  }
+
   window.__TAURI__ = { core: { Channel: FakeChannel, invoke: async (cmd, args = {}) => {
     window.__calls.push({ cmd, args: cmd === 'service_action' && args.password != null ? { ...args, password: '[redacted]' } : args });
     if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);
     if (/^(files_|file_|transfer_|plugin:dialog\|)/.test(cmd) || cmd === 'operation_cancel') return filesFixture(cmd, args);
+    if (cmd === 'services_read' && responses?.[args.target.host + ':services_read'] === undefined && responses?.services_read === undefined) return servicesFixture(args.target);
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
-      const supplied = responses[args.host + ':' + key] ?? responses[key];
+      const supplied = responses[(args.target?.host ?? args.host) + ':' + key] ?? responses[key];
       const value = cmd === 'service_action' && Array.isArray(supplied) ? supplied.shift() : supplied;
       if (value?.defer) await new Promise(resolve => window.__pending.push(resolve));
       const result = value?.defer ? value.value : value;
@@ -226,9 +239,10 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     if (cmd === 'cancel') return null;
     if (cmd === 'logs') return logs(args);
     if (cmd === 'service_action') {
-      const u = units.find(x => x.unit === args.unit);
+      const u = (args.scope === 'user' ? userUnits : units).find(x => x.unit === args.unit);
       if (!u) throw { kind: 'not_found', message: 'Unknown service' };
-      u.sub = args.action === 'stop' ? 'dead' : 'running';
+      if (args.action === 'enable' || args.action === 'disable') u.enabled = args.action === 'enable' ? 'enabled' : 'disabled';
+      else u.sub = args.action === 'stop' ? 'dead' : 'running';
       return 'ok';
     }
     const collect = cmd === 'query' && { snapshot, processes, timers }[args.what];

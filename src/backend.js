@@ -19,8 +19,10 @@ async function invoke(command, args = {}) {
 export const query = (target, what) => invoke('query', { ...target, what });
 /** @param {Target} target @param {string|null} unit @param {number} lines @returns {Promise<string>} */
 export const logs = (target, unit = null, lines = 300) => invoke('logs', { ...target, unit, lines });
-/** @param {Target} target @param {string} unit @param {'start'|'stop'|'restart'} action @param {string|null} [password] @returns {Promise<string>} */
-export const serviceAction = (target, unit, action, password) => invoke('service_action', { ...target, unit, action, ...(password === undefined ? {} : { password }) });
+/** Read system and SSH account service units, including installed unit files. */
+export const servicesRead = target => invoke('services_read', { target });
+/** @param {Target} target @param {string} unit @param {'start'|'stop'|'restart'|'enable'|'disable'} action @param {string|null} [password] @param {'system'|'user'} [scope] @returns {Promise<string>} */
+export const serviceAction = (target, unit, action, password, scope = 'system') => invoke('service_action', { target, scope, unit, action, ...(password === undefined ? {} : { password }) });
 /** @param {string|null} config @returns {Promise<string[]>} */
 export const hosts = (config = null) => invoke('hosts', { config });
 /** @param {string} id @returns {Promise<void>} */

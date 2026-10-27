@@ -3,6 +3,7 @@
 mod contracts;
 mod files;
 mod network;
+mod services;
 mod transfers;
 // P05 consumes effective config inspection.
 #[allow(dead_code)]
@@ -13,7 +14,6 @@ mod transport;
 
 use contracts::{valid_unit, AppError, ErrorKind, Target};
 use std::path::{Path, PathBuf};
-use zeroize::Zeroizing;
 
 // CPU and network are sampled first, before the script prints anything, so the app's own SSH output
 // doesn't show up as network traffic.
@@ -152,36 +152,6 @@ async fn logs(
     .await
 }
 
-#[tauri::command]
-async fn service_action(
-    host: String,
-    unit: String,
-    action: String,
-    config: Option<String>,
-    operation_id: Option<String>,
-    password: Option<String>,
-) -> Result<String, AppError> {
-    let password = password.map(Zeroizing::new);
-    if !["start", "stop", "restart", "enable", "disable"].contains(&action.as_str())
-        || !valid_unit(&unit)
-    {
-        return Err(AppError::new(
-            ErrorKind::InvalidInput,
-            "Refused: unknown action or invalid unit name",
-        ));
-    }
-    sudo::run_privileged(
-        &Target { host, config },
-        &["systemctl", &action, "--", &unit],
-        password,
-        transport::RunOpts {
-            operation_id,
-            ..Default::default()
-        },
-    )
-    .await
-}
-
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -190,7 +160,8 @@ fn main() {
             hosts,
             query,
             logs,
-            service_action,
+            services::services_read,
+            services::service_action,
             operation_cancel,
             terminal::terminal_open,
             terminal::terminal_input,

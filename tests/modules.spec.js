@@ -160,7 +160,7 @@ test('backend adapter preserves command arguments and typed errors', async ({ pa
   expect(results.calls).toEqual([
     { cmd: 'query', args: { host: 'testbox', config: 'C:\\test-config', what: 'processes' } },
     { cmd: 'logs', args: { host: 'testbox', config: 'C:\\test-config', unit: 'nginx', lines: 100 } },
-    { cmd: 'service_action', args: { host: 'testbox', config: 'C:\\test-config', unit: 'nginx.service', action: 'restart' } },
+    { cmd: 'service_action', args: { target: { host: 'testbox', config: 'C:\\test-config' }, scope: 'system', unit: 'nginx.service', action: 'restart' } },
     { cmd: 'hosts', args: { config: 'C:\\test-config' } },
     { cmd: 'operation_cancel', args: { id: 'request-1' } },
   ]);

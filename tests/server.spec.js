@@ -136,7 +136,7 @@ test('stopping a service asks first and sends the exact unit', async ({ page }) 
   await page.locator('[data-svc="stop"][data-u="nginx.service"]').click();
   await expect(page.locator('#toast')).toHaveText('stop nginx.service: ok');
   const act = (await calls(page)).find(c => c.cmd === 'service_action');
-  expect(act.args).toMatchObject({ host: 'testbox', unit: 'nginx.service', action: 'stop' });
+  expect(act.args).toMatchObject({ target: { host: 'testbox', config: null }, scope: 'system', unit: 'nginx.service', action: 'stop' });
 });
 
 test('sudo_required opens the one-action password dialog', async ({ page }) => {
