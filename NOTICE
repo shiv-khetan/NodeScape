@@ -1,0 +1,14 @@
+NodeScape
+Copyright 2026 The NodeScape Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles third-party components under their own licenses:
+
+- Inter font (https://github.com/rsms/inter)
+  Copyright 2016 The Inter Project Authors
+  SIL Open Font License 1.1 - see src/fonts/OFL.txt
+
+- xterm.js and @xterm/addon-fit (https://github.com/xtermjs/xterm.js)
+  Copyright (c) The xterm.js authors and the other holders named in the bundled license files
+  MIT License - see src/vendor/xterm/LICENSE.xterm and src/vendor/xterm/LICENSE.addon-fit

@@ -113,3 +113,13 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
   tooling may need internet access during development or packaging.
 
 See [SECURITY.md](SECURITY.md) for reporting and threat boundaries.
+
+## License
+
+NodeScape is licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE)
+for attribution and the bundled third-party components (the Inter font under the SIL Open
+Font License 1.1, and xterm.js under the MIT License), whose own license files ship with
+the app in `src/fonts/` and `src/vendor/xterm/`.
+
+Unless you state otherwise, any contribution you submit for inclusion is licensed under the
+Apache License 2.0, without additional terms or conditions.
