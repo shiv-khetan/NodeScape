@@ -70,3 +70,5 @@ export const terminalOpenKind = (target, kind, args, cols, rows, channel) => inv
 export const pickConfig = () => invoke('plugin:dialog|open', { options: { title: 'Choose SSH config', multiple: false, directory: false } });
 export const pickIdentity = () => invoke('plugin:dialog|open', { options: { title: 'Choose identity file', multiple: false, directory: false } });
 export const pickNewIdentity = () => invoke('plugin:dialog|save', { options: { title: 'New identity file' } });
+export const accountsRead = target => invoke('accounts_read', { target });
+export const accountAction = (target, action, args, password) => invoke('account_action', { target, action, args, password });

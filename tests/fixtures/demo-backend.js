@@ -235,8 +235,44 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     return { system: { units: listed.map(convert) }, user: { available: true, units: userUnits.map(convert) } };
   }
 
+  // Accounts fixture: mutations are confined to this in-memory fake host.
+  const accounts = {
+    currentUser: 'operator', sudoGroups: ['sudo'],
+    users: [
+      { name: 'root', uid: 0, gid: 0, home: '/root', shell: '/bin/bash', groups: ['root'], system: true, login: true },
+      { name: 'alice', uid: 1000, gid: 1000, home: '/home/alice', shell: '/bin/bash', groups: ['alice', 'sudo', 'team'], system: false, login: true },
+      { name: 'operator', uid: 1001, gid: 1001, home: '/home/operator', shell: '/bin/bash', groups: ['operator', 'team'], system: false, login: true },
+      { name: 'daemon', uid: 2, gid: 2, home: '/', shell: '/usr/sbin/nologin', groups: ['daemon'], system: true, login: false },
+      { name: 'nobody', uid: 65534, gid: 65534, home: '/', shell: '/bin/false', groups: [], system: true, login: false },
+    ],
+    groups: [{ name: 'root', gid: 0, members: [] }, { name: 'alice', gid: 1000, members: [] }, { name: 'operator', gid: 1001, members: [] }, { name: 'sudo', gid: 27, members: ['alice'] }, { name: 'team', gid: 2000, members: ['alice', 'operator'] }, { name: 'extra', gid: 2001, members: [] }],
+  };
+  function accountsFixture(cmd, { action, args = {}, password }) {
+    if (cmd === 'accounts_read') return structuredClone(accounts);
+    if (window.__accountsActionError) throw window.__accountsActionError;
+    const user = accounts.users.find(u => u.name === args.name);
+    if (action === 'create_user' && user) throw { kind: 'conflict', message: 'User already exists' };
+    if (['delete_user', 'remove_from_group'].includes(action) && user && (user.system || user.name === accounts.currentUser)) throw { kind: 'permission_denied', message: 'Refused: protected account' };
+    if (password == null) throw { kind: 'sudo_required', message: 'sudo: a password is required' };
+    if (action === 'create_user') {
+      accounts.users.push({ name: args.name, uid: 1100, gid: 1100, home: '/home/' + args.name, shell: '/bin/bash', groups: [args.name, ...(args.groups || [])], system: false, login: true });
+      accounts.groups.push({ name: args.name, gid: 1100, members: [] });
+      for (const group of accounts.groups) if (args.groups?.includes(group.name)) group.members.push(args.name);
+    } else if (action === 'delete_user') {
+      accounts.users = accounts.users.filter(u => u.name !== args.name);
+      for (const group of accounts.groups) group.members = group.members.filter(n => n !== args.name);
+    } else {
+      const group = accounts.groups.find(g => g.name === args.group);
+      if (!user || !group) throw { kind: 'not_found', message: 'User or group not found' };
+      if (action === 'add_to_group') { user.groups = [...new Set([...user.groups, args.group])]; group.members = [...new Set([...group.members, args.name])]; }
+      else if (action === 'remove_from_group') { user.groups = user.groups.filter(g => g !== args.group); group.members = group.members.filter(n => n !== args.name); }
+      else throw { kind: 'invalid_input', message: 'Unknown account action' };
+    }
+    return 'ok';
+  }
+
   window.__TAURI__ = { core: { Channel: FakeChannel, invoke: async (cmd, args = {}) => {
-    window.__calls.push({ cmd, args: cmd === 'service_action' && args.password != null ? { ...args, password: '[redacted]' } : args });
+    window.__calls.push({ cmd, args: ['service_action', 'account_action'].includes(cmd) && args.password != null ? { ...args, password: '[redacted]' } : args });
     if (/^(profiles_list|profile_save|profile_remove|environment_check|ssh_config_save|public_key_read|connection_test)$/.test(cmd) || (cmd === 'plugin:dialog|open' && args.options.title !== 'Upload file')) return onboardingFixture(cmd, args);
     if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);
     if (/^(files_|file_|transfer_|plugin:dialog\|)/.test(cmd) || cmd === 'operation_cancel') return filesFixture(cmd, args);
@@ -244,12 +280,13 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
       const supplied = responses[(args.target?.host ?? args.host) + ':' + key] ?? responses[key];
-      const value = cmd === 'service_action' && Array.isArray(supplied) ? supplied.shift() : supplied;
+      const value = ['service_action', 'account_action'].includes(cmd) && Array.isArray(supplied) ? supplied.shift() : supplied;
       if (value?.defer) await new Promise(resolve => window.__pending.push(resolve));
       const result = value?.defer ? value.value : value;
       if (result?.error) throw result.error;
       return result ?? (cmd === 'hosts' ? ['nas-01', 'testbox'] : '');
     }
+    if (cmd === 'accounts_read' || cmd === 'account_action') return accountsFixture(cmd, args);
     if (cmd === 'network_read') return {
   interfaces: [{ ifname: 'eth0', operstate: 'UP', addr_info: [{local:'192.0.2.2',prefixlen:24},{local:'2001:db8::2',prefixlen:64}] }, {ifname:'down0',operstate:'DOWN',addr_info:[]}],
   routes4: [{dst:'default',gateway:'192.0.2.1',dev:'eth0',metric:100},{dst:'default',gateway:'192.0.2.3',dev:'eth0',metric:200}],

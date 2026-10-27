@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod accounts;
 mod contracts;
 mod files;
 mod network;
@@ -158,6 +159,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            accounts::accounts_read,
+            accounts::account_action,
             network::network_read,
             profiles::profiles_list,
             profiles::profile_save,

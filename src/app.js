@@ -12,11 +12,13 @@ import * as terminal from './pages/terminal.js';
 import * as files from './pages/files.js';
 import * as onboarding from './pages/onboarding.js';
 import * as servers from './pages/servers.js';
+import * as accounts from './pages/accounts.js';
 
 const main = $('#main'), hostInput = $('#host');
 const routes = {
   onboarding: { page: onboarding, load: async () => null },
   servers: { page: servers, load: async () => null },
+  accounts: { page: accounts, load: target => accounts.load(target) },
   network: { page: network, load: target => backend.networkRead(target) },
   terminal: { page: terminal, load: async () => '' },
   files: { page: files, load: target => files.load(target) },
