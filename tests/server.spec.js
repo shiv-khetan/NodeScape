@@ -103,18 +103,18 @@ test('other connection errors show the ssh message', async ({ page }) => {
   await expect(page.locator('.empty')).toContainText('works in a terminal');
 });
 
-test('settings: chosen ssh config is stored and sent with every call', async ({ page }) => {
-  await openServer(page, { snapshot: F.SNAPSHOT, hosts: ['alpha', 'beta'] });
-  await page.locator('#settingsBtn').click();
-  await page.locator('#sshConfig').fill('"C:\\path\\to\\ssh\\config"');
-  await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('#settings')).not.toBeVisible();
-
-  // The dialog hides before its async "close" event saves, so wait for the value.
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('sshConfig'))).toBe('C:\\path\\to\\ssh\\config');
-  await expect.poll(async () => (await calls(page)).filter(c => c.args?.config === 'C:\\path\\to\\ssh\\config').map(c => c.cmd))
-    .toEqual(expect.arrayContaining(['hosts', 'query']));
-  await expect.poll(() => page.locator('#hosts option').evaluateAll(o => o.map(x => x.value))).toEqual(['alpha', 'beta']);
+test('settings default applies to new servers and leaves saved targets unchanged', async ({ page }) => {
+  await openServer(page, { snapshot: F.SNAPSHOT, hosts: ['alpha','beta'] });
+  await expect(page.locator('.hero h1')).toHaveText('Overview');
+  await page.locator('#settingsBtn').click(); await page.locator('#sshConfig').fill('"C:\\path\\to\\ssh\\config"');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('defaultSshConfig'))).toBe('C:\\path\\to\\ssh\\config');
+  await page.locator('#refresh').click();
+  expect((await calls(page)).filter(c=>c.cmd==='query').at(-1).args.config).toBeNull();
+  await page.getByRole('button',{name:'Add server',exact:true}).click();
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.getByLabel('SSH config file',{exact:true})).toHaveValue('C:\\path\\to\\ssh\\config');
+  await expect(page.getByLabel('SSH alias')).toContainText('alpha');
 });
 
 test('settings: cancel leaves the config unchanged', async ({ page }) => {

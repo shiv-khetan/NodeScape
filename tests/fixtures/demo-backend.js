@@ -1,4 +1,4 @@
-window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
+window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: initialProfiles } = {}) => {
   if (host !== null) localStorage.setItem('host', host);
   window.__calls = [];
   window.__pending = [];
@@ -102,6 +102,28 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     return (hit.length ? hit : [`-- No entries for ${unit} --`]).slice(-lines).join('\n');
   }
 
+  let savedProfiles = initialProfiles ?? (host && host !== 'demo' ? [...new Set([host, 'testbox', 'nas-01'])].map(h => ({ id:h, name:h, host:h, config:null })) : []);
+  // Persist across reloads to exercise the once-only localStorage migration.
+  try { savedProfiles = JSON.parse(sessionStorage.getItem('fixtureProfiles')) ?? savedProfiles; } catch {}
+  const persistProfiles = () => sessionStorage.setItem('fixtureProfiles', JSON.stringify(savedProfiles));
+  async function onboardingFixture(cmd, args) {
+    const supplied = responses?.[cmd];
+    if (supplied?.error) throw supplied.error;
+    if (supplied !== undefined) return supplied;
+    if (cmd === 'profiles_list') return { profiles:savedProfiles, warning:null };
+    if (cmd === 'profile_save') {
+      const profile = {...args.profile};
+      if (savedProfiles.some(p => p.id !== profile.id && p.name.toLowerCase() === profile.name.toLowerCase())) throw {kind:'invalid_input',message:'Server names must be unique'};
+      profile.id ||= 'profile-' + (savedProfiles.length+1);
+      const index = savedProfiles.findIndex(p=>p.id===profile.id); if(index<0) savedProfiles.push(profile); else savedProfiles[index]=profile; persistProfiles(); return profile;
+    }
+    if (cmd === 'profile_remove') { savedProfiles=savedProfiles.filter(p=>p.id!==args.id); persistProfiles(); return null; }
+    if (cmd === 'ssh_config_save') return {host:args.server.alias,config:'C:/synthetic/app/ssh_config'};
+    if (cmd === 'environment_check') return {ssh:{path:'C:/synthetic/ssh.exe',version:'OpenSSH_9.9',error:null},sshKeygen:{path:'C:/synthetic/ssh-keygen.exe',version:'OpenSSH_9.9 (ssh-keygen)',error:null},sshDirExists:true,publicKeys:['id_ed25519.pub']};
+    if (cmd === 'public_key_read') return 'ssh-ed25519 AAAA nodescape';
+    if (cmd === 'connection_test') return null;
+    if (cmd === 'plugin:dialog|open') return args.options.title === 'Choose SSH config' ? 'C:/synthetic/ssh config' : 'C:/synthetic/key with spaces';
+  }
   const terminalSessions = new Map();
   let terminalNext = 0;
   class FakeChannel { constructor(onmessage) { this.onmessage = onmessage; } }
@@ -121,10 +143,10 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
     if (response?.defer) await new Promise(resolve => window.__pending.push(resolve));
     const result = response?.defer ? response.value : response;
     if (result?.error) throw result.error;
-    if (cmd === 'terminal_open') {
+    if (cmd === 'terminal_open' || cmd === 'terminal_open_kind') {
       const id = 'terminal-' + ++terminalNext;
       terminalSessions.set(id, { channel: args.channel, host: args.target.host, unacked: 0 });
-      window.__terminalEmit(id, 'Connected to ' + args.target.host + '\r\n$ ');
+      window.__terminalEmit(id, cmd === 'terminal_open_kind' ? (args.kind === 'trust_host' ? 'ED25519 key fingerprint is SHA256:synthetic. Continue connecting (yes/no)? ' : args.kind === 'keygen' ? 'Enter passphrase: ' : 'Password: ') : 'Connected to ' + args.target.host + '\r\n$ ');
       return id;
     }
     if (cmd === 'terminal_close') { window.__terminalExit(args.id); terminalSessions.delete(args.id); return null; }
@@ -215,6 +237,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
 
   window.__TAURI__ = { core: { Channel: FakeChannel, invoke: async (cmd, args = {}) => {
     window.__calls.push({ cmd, args: cmd === 'service_action' && args.password != null ? { ...args, password: '[redacted]' } : args });
+    if (/^(profiles_list|profile_save|profile_remove|environment_check|ssh_config_save|public_key_read|connection_test)$/.test(cmd) || (cmd === 'plugin:dialog|open' && args.options.title !== 'Upload file')) return onboardingFixture(cmd, args);
     if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);
     if (/^(files_|file_|transfer_|plugin:dialog\|)/.test(cmd) || cmd === 'operation_cancel') return filesFixture(cmd, args);
     if (cmd === 'services_read' && responses?.[args.target.host + ':services_read'] === undefined && responses?.services_read === undefined) return servicesFixture(args.target);
@@ -225,7 +248,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01' } = {}) => {
       if (value?.defer) await new Promise(resolve => window.__pending.push(resolve));
       const result = value?.defer ? value.value : value;
       if (result?.error) throw result.error;
-      return result ?? (cmd === 'hosts' ? [] : '');
+      return result ?? (cmd === 'hosts' ? ['nas-01', 'testbox'] : '');
     }
     if (cmd === 'network_read') return {
   interfaces: [{ ifname: 'eth0', operstate: 'UP', addr_info: [{local:'192.0.2.2',prefixlen:24},{local:'2001:db8::2',prefixlen:64}] }, {ifname:'down0',operstate:'DOWN',addr_info:[]}],

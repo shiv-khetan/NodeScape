@@ -58,3 +58,15 @@ export function transferStart(target, direction, localPath, remotePath, operatio
   channel.onmessage = onProgress;
   return invoke('transfer_start', { target, direction, localPath, remotePath, operationId, overwrite, channel });
 }
+
+export const profilesList = () => invoke('profiles_list');
+export const profileSave = profile => invoke('profile_save', { profile });
+export const profileRemove = id => invoke('profile_remove', { id });
+export const environmentCheck = () => invoke('environment_check');
+export const sshConfigSave = server => invoke('ssh_config_save', { server });
+export const publicKeyRead = path => invoke('public_key_read', { path });
+export const connectionTest = (target, operationId) => invoke('connection_test', { target, operationId });
+export const terminalOpenKind = (target, kind, args, cols, rows, channel) => invoke('terminal_open_kind', { target, kind, args, cols, rows, channel });
+export const pickConfig = () => invoke('plugin:dialog|open', { options: { title: 'Choose SSH config', multiple: false, directory: false } });
+export const pickIdentity = () => invoke('plugin:dialog|open', { options: { title: 'Choose identity file', multiple: false, directory: false } });
+export const pickNewIdentity = () => invoke('plugin:dialog|save', { options: { title: 'New identity file' } });

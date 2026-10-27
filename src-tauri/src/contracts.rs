@@ -149,6 +149,38 @@ pub fn valid_host(h: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || "@._-:%".contains(c))
 }
 
+pub fn valid_local_path(path: &str) -> bool {
+    !path.is_empty() && path.len() <= 4096 && !path.chars().any(char::is_control)
+}
+
+pub fn valid_public_key(key: &str) -> bool {
+    if key.len() > 16384
+        || key
+            .chars()
+            .any(|c| !(c.is_ascii_alphanumeric() || " -_@./+=".contains(c)))
+    {
+        return false;
+    }
+    let mut fields = key.split(' ');
+    let prefix = fields.next().unwrap_or_default();
+    let body = fields.next().unwrap_or_default();
+    [
+        "ssh-ed25519",
+        "ssh-rsa",
+        "ecdsa-sha2-nistp256",
+        "ecdsa-sha2-nistp384",
+        "ecdsa-sha2-nistp521",
+    ]
+    .contains(&prefix)
+        && body.len() >= 4
+        && body.len().is_multiple_of(4)
+        && body
+            .trim_end_matches('=')
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"+/".contains(&c))
+        && body.len() - body.trim_end_matches('=').len() <= 2
+}
+
 pub fn valid_unit(u: &str) -> bool {
     !u.is_empty()
         && !u.starts_with('-')

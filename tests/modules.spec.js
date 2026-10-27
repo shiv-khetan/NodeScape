@@ -8,9 +8,16 @@ const readState = page => page.evaluate(async () => {
   return { snap: state.snap, histories: [...state.histories] };
 });
 const release = page => page.evaluate(() => window.__pending.shift()());
+async function editConfig(page, config) {
+  await page.getByRole('button', {name:'Manage servers',exact:true}).click();
+  await page.getByRole('button', {name:'Edit',exact:true}).first().click();
+  await page.getByLabel('SSH config file', {exact:true}).fill(config);
+  await page.getByRole('button', {name:'Save changes',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Edit server'})).toHaveCount(0);
+  await nav(page,'Overview');
+}
 const switchHost = async (page, host) => {
-  await page.locator('#host').fill(host);
-  await page.locator('#host').press('Tab');
+  await page.locator('#host').selectOption(host);
 };
 
 test('production has no demo script, host, globals or seeded history', async ({ page }) => {
@@ -42,9 +49,9 @@ test('without Tauri the desktop requirement is clear on every route', async ({ p
 
 test('no chosen host asks the user to add a server and makes no remote query', async ({ page }) => {
   await openServer(page, {}, null);
-  await expect(page.locator('.empty')).toContainText('Add a server');
+  await expect(page.locator('.hero h1')).toHaveText('Add a server');
   await expect(page.locator('#host')).toHaveValue('');
-  expect(await page.evaluate(() => window.__calls.some(c => c.cmd !== 'hosts'))).toBe(false);
+  expect(await page.evaluate(() => window.__calls.some(c => ['query','logs','network_read'].includes(c.cmd)))).toBe(false);
   expect((await readState(page)).histories).toEqual([]);
 });
 
@@ -99,10 +106,10 @@ test('clearing the host invalidates an in-flight response', async ({ page }) => 
   await openServer(page, { snapshot: { defer: true, value: F.SNAPSHOT } });
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
   await switchHost(page, '');
-  await expect(page.locator('.empty')).toContainText('Add a server');
+  await expect(page.locator('.hero h1')).toHaveText('Add a server');
   await release(page);
   expect(await readState(page)).toEqual({ snap: null, histories: [] });
-  await expect(page.locator('.empty')).toContainText('Add a server');
+  await expect(page.locator('.hero h1')).toHaveText('Add a server');
 });
 
 test('history is retained per host and isolated across SSH configs', async ({ page }) => {
@@ -113,23 +120,16 @@ test('history is retained per host and isolated across SSH configs', async ({ pa
   await expect.poll(async () => (await readState(page)).histories.length).toBe(2);
   await switchHost(page, 'testbox');
   await expect.poll(async () => (await readState(page)).histories.map(([, h]) => h.cpu.length)).toEqual([2, 1]);
-  await page.locator('#settingsBtn').click();
-  await page.locator('#sshConfig').fill('C:\\test-config');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await editConfig(page, 'C:\\test-config');
   await expect.poll(async () => (await readState(page)).histories.map(([, h]) => h.cpu.length)).toEqual([2, 1, 1]);
 });
 
-test('changing config invalidates pending snapshots and alias lists', async ({ page }) => {
-  await openServer(page, {
-    snapshot: { defer: true, value: F.SNAPSHOT },
-    hosts: { defer: true, value: ['testbox'] },
-  });
+test('editing a profile config invalidates pending snapshots', async ({ page }) => {
+  await openServer(page, { snapshot: { defer: true, value: F.SNAPSHOT } });
+  await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
+  await editConfig(page, 'C:\\test-config');
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(2);
-  await page.locator('#settingsBtn').click();
-  await page.locator('#sshConfig').fill('C:\\test-config');
-  await page.getByRole('button', { name: 'Save' }).click();
-  await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(4);
-  await page.evaluate(() => { window.__pending.pop()(); window.__pending.pop()(); });
+  await page.evaluate(() => window.__pending.pop()());
   await expect(page.locator('.hero h1')).toHaveText('Overview');
   const before = await readState(page);
   await page.evaluate(() => window.__pending.splice(0).forEach(resolve => resolve()));
@@ -179,7 +179,7 @@ test('the static server exposes only app and fixture files', async ({ request })
 
 test('a legacy demo selection starts with an empty server state', async ({ page }) => {
   await openServer(page, {}, 'demo');
-  await expect(page.locator('.empty')).toContainText('Add a server');
+  await expect(page.locator('.hero h1')).toHaveText('Add a server');
   await expect(page.locator('#host')).toHaveValue('');
   expect(await page.evaluate(() => window.__calls.some(c => c.cmd === 'query'))).toBe(false);
   expect((await readState(page)).histories).toEqual([]);

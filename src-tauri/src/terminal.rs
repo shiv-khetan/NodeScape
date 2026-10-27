@@ -325,6 +325,188 @@ pub fn close_all() {
     }
 }
 
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionKind {
+    Keygen,
+    TrustHost,
+    InstallKey,
+}
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct KindArgs {
+    pub path: Option<String>,
+    pub public_key: Option<String>,
+}
+const INSTALL_KEY: &str = "umask 077\nmkdir -p \"$HOME/.ssh\" || exit\ntouch \"$HOME/.ssh/authorized_keys\" || exit\nchmod 700 \"$HOME/.ssh\" || exit\nchmod 600 \"$HOME/.ssh/authorized_keys\" || exit\nkey={{KEY}}\ngrep -qxF -- \"$key\" \"$HOME/.ssh/authorized_keys\" || printf '\\n%s\\n' \"$key\" >> \"$HOME/.ssh/authorized_keys\"\n";
+fn kind_command(
+    target: &Target,
+    kind: SessionKind,
+    args: &KindArgs,
+    proxy: Option<&str>,
+) -> Result<CommandBuilder, AppError> {
+    kind_command_options(target, kind, args, proxy, None)
+}
+pub(crate) fn kind_command_options(
+    target: &Target,
+    kind: SessionKind,
+    args: &KindArgs,
+    proxy: Option<&str>,
+    known_hosts: Option<&Path>,
+) -> Result<CommandBuilder, AppError> {
+    use crate::contracts::{valid_local_path, valid_public_key};
+    if matches!(kind, SessionKind::Keygen) {
+        if args.public_key.is_some() {
+            return Err(invalid("Keygen accepts only a new key path"));
+        }
+        let path = args
+            .path
+            .as_deref()
+            .ok_or_else(|| invalid("Choose a new identity file path"))?;
+        if !valid_local_path(path)
+            || !Path::new(path).is_absolute()
+            || !Path::new(path).parent().is_some_and(|p| p.is_dir())
+        {
+            return Err(invalid(
+                "Choose an absolute key path in an existing directory",
+            ));
+        }
+        for file in [path.to_owned(), format!("{path}.pub")] {
+            match std::fs::symlink_metadata(file) {
+                Ok(_) => {
+                    return Err(AppError::new(
+                        ErrorKind::Conflict,
+                        "Key generation refused: the private or public key already exists",
+                    ))
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+                Err(e) => return Err(internal(e)),
+            }
+        }
+        let mut command = CommandBuilder::new(crate::onboarding::keygen_program());
+        command.args(["-t", "ed25519", "-f", path, "-C", "nodescape"]);
+        return Ok(command);
+    }
+    if !valid_host(&target.host) {
+        return Err(invalid("Invalid SSH host"));
+    }
+    if let Some(config) = &target.config {
+        if !valid_local_path(config) || !Path::new(config).is_file() {
+            return Err(invalid("SSH config file not found or invalid path"));
+        }
+    }
+    if args.path.is_some() {
+        return Err(invalid("This session does not accept a key path"));
+    }
+    let script = match kind {
+        SessionKind::TrustHost if args.public_key.is_none() => "exit".into(),
+        SessionKind::InstallKey => {
+            let key = args
+                .public_key
+                .as_deref()
+                .filter(|key| valid_public_key(key))
+                .ok_or_else(|| invalid("Invalid OpenSSH public key"))?;
+            let script = INSTALL_KEY.replace("{{KEY}}", &format!("'{key}'"));
+            format!("sh -c '{}'", script.replace('\'', "'\\''"))
+        }
+        _ => return Err(invalid("Unexpected setup session arguments")),
+    };
+    let mut command = CommandBuilder::new(transport::ssh_program());
+    if let Some(config) = &target.config {
+        command.args(["-F", config]);
+    }
+    command.arg("-T");
+    for option in [
+        "BatchMode=no",
+        "UpdateHostKeys=no",
+        "ConnectTimeout=10",
+        "ServerAliveInterval=15",
+        "ServerAliveCountMax=3",
+        "PermitLocalCommand=no",
+        "ClearAllForwardings=yes",
+        "ForwardAgent=no",
+        "RequestTTY=no",
+        "SessionType=default",
+        "RemoteCommand=none",
+        "ForkAfterAuthentication=no",
+        "ControlMaster=no",
+        "ControlPath=none",
+        "ControlPersist=no",
+    ] {
+        command.args(["-o", option]);
+    }
+    command.args([
+        "-o",
+        if matches!(kind, SessionKind::TrustHost) {
+            "StrictHostKeyChecking=ask"
+        } else {
+            "StrictHostKeyChecking=yes"
+        },
+    ]);
+    if matches!(kind, SessionKind::InstallKey) {
+        command.args([
+            "-o",
+            "PreferredAuthentications=password,keyboard-interactive",
+        ]);
+    }
+    if let Some(proxy) = proxy {
+        command.arg("-o");
+        command.arg(format!("ProxyCommand={proxy}"));
+    }
+    if let Some(path) = known_hosts {
+        command.arg("-o");
+        command.arg(format!(
+            "UserKnownHostsFile=\"{}\"",
+            path.to_string_lossy().replace('\\', "/")
+        ));
+        for option in [
+            "GlobalKnownHostsFile=none",
+            "KnownHostsCommand=none",
+            "VerifyHostKeyDNS=no",
+        ] {
+            command.args(["-o", option]);
+        }
+    }
+    command.args(["--", &target.host, &script]);
+    command.env("TERM", "xterm-256color");
+    Ok(command)
+}
+#[tauri::command]
+pub async fn terminal_open_kind(
+    target: Target,
+    kind: SessionKind,
+    args: KindArgs,
+    cols: u16,
+    rows: u16,
+    channel: Channel<TerminalEvent>,
+) -> Result<String, AppError> {
+    size(cols, rows)?;
+    // Validate before ssh -G or creating any PTY/process.
+    kind_command(&target, kind, &args, None)?;
+    let proxy = if matches!(kind, SessionKind::Keygen) {
+        None
+    } else {
+        let effective = ssh_config::effective(&target).await?;
+        effective
+            .get("proxyjump")
+            .filter(|jump| !jump.eq_ignore_ascii_case("none"))
+            .map(|jump| transport::proxy_command(&target, &transport::ssh_program(), jump, None))
+            .transpose()?
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let command = kind_command(&target, kind, &args, proxy.as_deref())?;
+        spawn(
+            command,
+            target.host,
+            cols,
+            rows,
+            Box::new(move |event| channel.send(event).map_err(|_| ())),
+        )
+    })
+    .await
+    .map_err(internal)?
+}
+
 pub async fn open(
     target: Target,
     cols: u16,
@@ -603,5 +785,81 @@ mod tests {
         let session = lookup(&id).unwrap();
         close(&id).unwrap();
         assert!(session.flow.lock().unwrap().exit.is_some());
+    }
+}
+
+#[cfg(test)]
+mod onboarding_tests {
+    use super::*;
+    fn argv(command: CommandBuilder) -> Vec<String> {
+        command
+            .get_argv()
+            .iter()
+            .map(|s| s.to_string_lossy().into())
+            .collect()
+    }
+    #[test]
+    fn fixed_kinds_validate_arguments_and_keygen_never_overwrites() {
+        let dir = tempfile::Builder::new()
+            .prefix("keygen space ")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("new key");
+        let target = Target {
+            host: "testbox".into(),
+            config: None,
+        };
+        let args = KindArgs {
+            path: Some(path.to_string_lossy().into()),
+            public_key: None,
+        };
+        let cmd = kind_command(&target, SessionKind::Keygen, &args, None).unwrap();
+        assert_eq!(
+            argv(cmd),
+            vec![
+                crate::onboarding::keygen_program()
+                    .to_string_lossy()
+                    .into_owned(),
+                "-t".into(),
+                "ed25519".into(),
+                "-f".into(),
+                path.to_string_lossy().into_owned(),
+                "-C".into(),
+                "nodescape".into()
+            ]
+        );
+        std::fs::write(path.with_extension("pub"), "public").unwrap();
+        assert!(kind_command(&target, SessionKind::Keygen, &args, None).is_err());
+        std::fs::remove_file(path.with_extension("pub")).unwrap();
+        std::fs::write(&path, "private").unwrap();
+        assert!(kind_command(&target, SessionKind::Keygen, &args, None).is_err());
+        let args = KindArgs::default();
+        let trust = argv(kind_command(&target, SessionKind::TrustHost, &args, None).unwrap());
+        for value in [
+            "StrictHostKeyChecking=ask",
+            "BatchMode=no",
+            "PermitLocalCommand=no",
+            "ClearAllForwardings=yes",
+        ] {
+            assert!(trust.iter().any(|s| s == value));
+        }
+        assert_eq!(&trust[trust.len() - 3..], ["--", "testbox", "exit"]);
+        let args = KindArgs {
+            path: None,
+            public_key: Some("ssh-ed25519 AAAA nodescape".into()),
+        };
+        let install = argv(kind_command(&target, SessionKind::InstallKey, &args, None).unwrap());
+        assert!(install.iter().any(|s| s == "StrictHostKeyChecking=yes"));
+        assert!(install
+            .iter()
+            .any(|s| s == "PreferredAuthentications=password,keyboard-interactive"));
+        assert!(install.last().unwrap().contains("grep -qxF"));
+        let bad = KindArgs {
+            path: None,
+            public_key: Some("ssh-ed25519 AAAA;id".into()),
+        };
+        assert!(kind_command(&target, SessionKind::InstallKey, &bad, None).is_err());
+        assert!(serde_json::from_str::<SessionKind>("\"sh\"").is_err());
+        assert!(serde_json::from_str::<KindArgs>(r#"{"command":"id"}"#).is_err());
     }
 }

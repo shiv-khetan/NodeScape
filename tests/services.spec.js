@@ -39,12 +39,11 @@ test('late service reads cannot replace a newer target', async ({ page }) => {
   await openServer(page, {
     snapshot: F.SNAPSHOT,
     'testbox:services_read': { defer: true, value: data() },
-    'other-testbox:services_read': newer,
+    'nas-01:services_read': newer,
   });
   await nav(page, 'Services');
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
-  await page.locator('#host').fill('other-testbox');
-  await page.locator('#host').press('Tab');
+  await page.locator('#host').selectOption('nas-01');
   await expect(row(page, 'newer.service')).toBeVisible();
   await page.evaluate(() => window.__pending.shift()());
   await expect(row(page, 'newer.service')).toBeVisible();

@@ -1,5 +1,5 @@
 import * as backend from './backend.js';
-import { state, store, beginRequest, isCurrent, selectTarget, acceptSnapshot } from './state.js';
+import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } from './state.js';
 import { $, esc } from './ui/dom.js';
 import { parseSnapshot } from './ui/parse.js';
 import * as overview from './pages/overview.js';
@@ -10,9 +10,13 @@ import * as network from './pages/network.js';
 import * as scheduled from './pages/scheduled.js';
 import * as terminal from './pages/terminal.js';
 import * as files from './pages/files.js';
+import * as onboarding from './pages/onboarding.js';
+import * as servers from './pages/servers.js';
 
 const main = $('#main'), hostInput = $('#host');
 const routes = {
+  onboarding: { page: onboarding, load: async () => null },
+  servers: { page: servers, load: async () => null },
   network: { page: network, load: target => backend.networkRead(target) },
   terminal: { page: terminal, load: async () => '' },
   files: { page: files, load: target => files.load(target) },
@@ -27,16 +31,16 @@ function dispose() { mounted?.dispose?.(); mounted = null; }
 
 async function refresh(fromTimer) {
   if (fromTimer === true && state.busy) return;
+  if (!state.host && state.view !== 'servers') state.view = 'onboarding';
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.view === state.view));
   const terminalChanged = terminal.targetChanged();
   if (state.view === 'terminal' && mounted === terminal && !terminalChanged) return;
   const request = beginRequest();
-  if (!backend.available() || !state.host) {
+  if (!backend.available()) {
     dispose();
     state.busy = false;
     $('#refresh').classList.remove('spin');
-    main.innerHTML = !backend.available()
-      ? '<div class="empty"><h1>NodeScape needs its desktop app to run</h1><p>Open NodeScape in its desktop app to connect to your servers.</p></div>'
-      : '<div class="empty"><h1>Add a server</h1><p>Type an alias from your SSH config or <code>user@host</code> above. Choose your SSH config file in Settings.</p><p>NodeScape uses your system <code>ssh</code> with key auth (ssh-agent). Nothing is installed on the server.</p></div>';
+    main.innerHTML = '<div class="empty"><h1>NodeScape needs its desktop app to run</h1><p>Open NodeScape in its desktop app to connect to your servers.</p></div>';
     return;
   }
   state.busy = true;
@@ -52,7 +56,7 @@ async function refresh(fromTimer) {
     dispose();
     main.innerHTML = route.page.render(data);
     mounted = route.page;
-    mounted.mount?.(main, { refresh });
+    mounted.mount?.(main, { refresh, go, profilesChanged });
     if (focused) main.querySelector('#' + focused)?.focus();
   } catch (error) {
     if (!isCurrent(request)) return;
@@ -89,35 +93,54 @@ main.addEventListener('click', e => {
 });
 $('#refresh').addEventListener('click', () => refresh());
 hostInput.addEventListener('change', () => {
-  const host = hostInput.value.trim();
-  selectTarget(host);
-  store('host', host);
-  refresh();
+  selectProfile(state.profiles.find(p => p.id === hostInput.value));
+  terminal.targetChanged();
+  go(state.profileId ? (['onboarding','servers'].includes(state.view) ? 'overview' : state.view) : 'onboarding');
 });
-
-let hostsGeneration = 0;
-async function loadHosts() {
-  const generation = ++hostsGeneration, config = state.config;
-  if (!backend.available()) return;
-  try {
-    const hosts = await backend.hosts(config);
-    if (generation === hostsGeneration && config === state.config) $('#hosts').innerHTML = hosts.map(h => `<option value="${esc(h)}">`).join('');
-  } catch { /* A custom target can still be entered when no aliases are available. */ }
+$('#addServer').addEventListener('click', () => go('onboarding'));
+$('#manageServers').addEventListener('click', () => go('servers'));
+async function loadProfiles() {
+  const result = await backend.profilesList();
+  state.profiles = result.profiles;
+  state.profileWarning = result.warning || '';
+  hostInput.innerHTML = '<option value="">Select a server</option>' + state.profiles.map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('');
+}
+async function profilesChanged(profile, open = false) {
+  await loadProfiles();
+  const selected = state.profiles.find(p => p.id === (open ? profile?.id : state.profileId)) || state.profiles[0];
+  selectProfile(selected); hostInput.value = state.profileId;
+  terminal.targetChanged();
+  go(open ? 'overview' : 'servers');
 }
 const dialog = $('#settings');
 $('#settingsBtn').addEventListener('click', () => {
-  $('#sshConfig').value = state.config || '';
+  $('#sshConfig').value = state.defaultConfig || '';
   dialog.showModal();
 });
 dialog.addEventListener('close', () => {
   if (dialog.returnValue !== 'save') return;
-  const config = $('#sshConfig').value.trim().replace(/^"(.*)"$/, '$1');
-  store('sshConfig', config);
-  selectTarget(state.host, config || null);
-  loadHosts();
-  refresh();
+  state.defaultConfig = $('#sshConfig').value.trim().replace(/^"(.*)"$/, '$1') || null;
+  store('defaultSshConfig', state.defaultConfig || '');
 });
+async function start() {
+  if (!backend.available()) { refresh(); return; }
+  try {
+    await loadProfiles();
+    if (store('profilesMigrated') !== '1') {
+      const host = store('host');
+      if (!state.profiles.length && host && host !== 'demo') {
+        await backend.profileSave({id:'',name:host,host,config:store('sshConfig') || null});
+        await loadProfiles();
+      }
+      store('profilesMigrated', '1');
+    }
+    selectProfile(state.profiles.find(p => p.id === store('selectedProfile')) || state.profiles[0]);
+    hostInput.value = state.profileId;
+    refresh();
+  } catch (error) {
+    main.innerHTML = '<div class="empty"><h1>Saved servers could not be loaded</h1><p class="error">' + esc(error.kind + ': ' + error.message) + '</p><button class="pill" data-start-retry>Try again</button></div>';
+    main.querySelector('[data-start-retry]').onclick = start;
+  }
+}
 setInterval(() => state.live && state.view === 'overview' && refresh(true), 5000);
-hostInput.value = state.host;
-loadHosts();
-refresh();
+start();

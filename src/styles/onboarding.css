@@ -1,0 +1,35 @@
+/* Saved targets and the first connection share the app's existing controls. */
+header { flex-wrap: wrap; }
+#nav { order: 5; width: 100%; justify-content: center; overflow-x: auto; }
+.hostbox { margin-left: auto; max-width: 280px; color: var(--ink); }
+.hostbox select { width: 170px; min-width: 0; border: 0; background: transparent; font-size: 13px; }
+.onboarding { max-width: 920px; margin: 0 auto 24px; }
+.setup-steps { display: flex; flex-wrap: wrap; gap: 8px 24px; list-style: none; padding: 0; margin: 0 0 18px; color: #555; }
+.setup-steps li { padding: 6px 0; border-bottom: 2px solid transparent; }
+.setup-steps [aria-current] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.setup-card, .servers-card { padding: 26px; }
+.onboarding p { max-width: 72ch; color: #555; overflow-wrap: anywhere; }
+.onboarding .notice { padding: 12px; color: #7a5600; border-radius: 12px; }
+.onboarding [role="alert"] { color: #b4183f; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 0; }
+.onboarding dl { display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 12px; margin: 22px 0; }
+.onboarding dt { font-weight: 500; }
+.onboarding dd { margin: 0; overflow-wrap: anywhere; color: #555; }
+.setup-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin: 22px 0; }
+.setup-fields > div { min-width: 0; }
+.setup-fields label { display: block; margin-bottom: 6px; font-size: 13px; }
+.setup-fields .field { width: 100%; min-width: 0; background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+.setup-fields .pill { margin-top: 8px; }
+.setup-wide { grid-column: 1 / -1; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.onboarding button:disabled { opacity: .5; cursor: default; }
+.onboarding .segtabs { display: inline-flex; margin-top: 8px; }
+.setup-terminal { height: 300px; margin-top: 20px; background: var(--dark); border-radius: 12px; padding: 10px; overflow: hidden; }
+.setup-terminal [data-terminal-screen] { width: 100%; height: 100%; }
+.server-list { display: grid; gap: 0; }
+[data-server-row] { display: flex; align-items: center; gap: 20px; justify-content: space-between; padding: 18px 0; border-top: 1px solid var(--line); min-width: 0; }
+[data-server-row] .who > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+[data-server-row] .who small { color: #555; }
+[data-server-row] .acts { flex: none; }
+.server-editor { margin: 24px 0; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+@media(max-width:1000px) { #nav { justify-content: space-between; } .hostbox { flex: 0 1 auto; } }
+@media(max-width:850px) { .setup-fields { grid-template-columns: minmax(0,1fr); } .setup-card,.servers-card { padding: 20px; } .setup-steps { gap: 6px 18px; } }

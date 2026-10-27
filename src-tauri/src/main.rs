@@ -3,6 +3,8 @@
 mod contracts;
 mod files;
 mod network;
+mod onboarding;
+mod profiles;
 mod services;
 mod transfers;
 // P05 consumes effective config inspection.
@@ -157,6 +159,14 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             network::network_read,
+            profiles::profiles_list,
+            profiles::profile_save,
+            profiles::profile_remove,
+            ssh_config::ssh_config_save,
+            onboarding::environment_check,
+            onboarding::public_key_read,
+            onboarding::connection_test,
+            terminal::terminal_open_kind,
             hosts,
             query,
             logs,

@@ -60,15 +60,16 @@ test('page switches preserve session and hidden output', async ({ page }) => {
 test('server and config switches close sessions even on another page', async ({ page }) => {
   await open(page);
   await nav(page, 'Services');
-  await page.locator('#host').fill('testbox');
-  await page.locator('#host').dispatchEvent('change');
+  await page.locator('#host').selectOption('testbox');
+
   await expect.poll(async () => (await calls(page, 'terminal_close')).length).toBe(1);
   await nav(page, 'Terminal');
   await expect(page.locator('[data-terminal-status]')).toHaveText('Connected');
   expect((await calls(page, 'terminal_open')).at(-1).args.target.host).toBe('testbox');
-  await page.locator('#settingsBtn').click();
-  await page.locator('#sshConfig').fill('C:/test config');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', {name:'Manage servers',exact:true}).click();
+  await page.locator('[data-server-row]').filter({has:page.locator('.who p',{hasText:'testbox'})}).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByLabel('SSH config file',{exact:true}).fill('C:/test config');
+  await page.getByRole('button',{name:'Save changes'}).click();
   await expect.poll(async () => (await calls(page, 'terminal_close')).length).toBe(2);
 });
 
@@ -109,7 +110,7 @@ test('switching target while open is pending closes the late session', async ({ 
   await page.goto(APP); await nav(page, 'Terminal');
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
   await nav(page, 'Services');
-  await page.locator('#host').fill('testbox'); await page.locator('#host').dispatchEvent('change');
+  await page.locator('#host').selectOption('testbox');
   await page.evaluate(() => window.__pending.shift()());
   await expect.poll(async () => (await calls(page, 'terminal_close')).length).toBe(1);
   await expect(page.locator('.hero h1')).toHaveText('Services');

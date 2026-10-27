@@ -3,10 +3,10 @@ export const store = (key, value) => {
   catch { return null; }
 };
 
-const savedHost = store('host');
+
 export const state = {
-  host: savedHost === 'demo' ? '' : savedHost || '',
-  config: store('sshConfig') || null,
+  host: '', config: null, profileId: '', profiles: [], profileWarning: '',
+  defaultConfig: (store('defaultSshConfig') ?? store('sshConfig')) || null,
   view: 'overview', live: true, busy: false, generation: 0,
   snap: null, histories: new Map(),
   svcFilter: '', svcState: 'all', logUnit: '', logLines: 300,
@@ -25,6 +25,7 @@ export function selectTarget(host, config = state.config) {
   state.host = host;
   state.config = config;
   state.snap = null;
+  state.svcFilter = ''; state.svcState = 'all'; state.logUnit = ''; state.logLines = 300;
 }
 export function acceptSnapshot(request, snapshot) {
   if (!isCurrent(request)) return;
@@ -35,4 +36,10 @@ export function acceptSnapshot(request, snapshot) {
     tx: [...previous.tx, snapshot.tx].slice(-14),
   });
   state.snap = snapshot;
+}
+
+export function selectProfile(profile) {
+  state.profileId = profile?.id || '';
+  selectTarget(profile?.host || '', profile?.config || null);
+  store('selectedProfile', state.profileId);
 }

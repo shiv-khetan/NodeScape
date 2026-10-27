@@ -2,6 +2,12 @@
 #[path = "../src/contracts.rs"]
 mod contracts;
 #[allow(dead_code)]
+#[path = "../src/onboarding.rs"]
+mod onboarding;
+#[allow(dead_code)]
+#[path = "../src/profiles.rs"]
+mod profiles;
+#[allow(dead_code)]
 #[path = "../src/ssh_config.rs"]
 mod ssh_config;
 #[allow(dead_code)]

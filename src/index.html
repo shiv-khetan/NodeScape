@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="vendor/xterm/xterm.css">
   <link rel="stylesheet" href="styles/terminal.css">
   <link rel="stylesheet" href="styles/files.css">
+  <link rel="stylesheet" href="styles/onboarding.css">
 </head>
 <body>
   <header>
@@ -25,11 +26,12 @@
       <button data-view="terminal">Terminal</button>
       <button data-view="files">Files</button>
     </nav>
-    <label class="pillbar hostbox" title="~/.ssh/config alias or user@host">
+    <label class="pillbar hostbox" title="Saved server">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
-      <input id="host" list="hosts" placeholder="user@host" spellcheck="false" autocomplete="off">
-      <datalist id="hosts"></datalist>
+      <select id="host" aria-label="Server"><option value="">Select a server</option></select>
     </label>
+    <button class="pill" id="addServer">Add server</button>
+    <button class="pill" id="manageServers">Manage servers</button>
     <button class="round" id="refresh" title="Refresh">
       <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
     </button>
@@ -40,9 +42,9 @@
   <dialog id="settings">
     <form method="dialog">
       <h2>Settings</h2>
-      <label for="sshConfig">SSH config file</label>
+      <label for="sshConfig">Default SSH config for new servers</label>
       <input id="sshConfig" class="field" placeholder="Blank = ~/.ssh/config, e.g. C:\path\to\ssh\config" spellcheck="false">
-      <p class="muted">Host aliases, users, keys and HostKeyAlias come from this file. Unknown host keys are always refused.</p>
+      <p class="muted">Each saved server keeps its own config. This default applies when adding a server.</p>
       <div class="dlg-actions"><button value="cancel" class="pill">Cancel</button><button value="save" class="pill primary">Save</button></div>
     </form>
   </dialog>
