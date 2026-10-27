@@ -449,6 +449,20 @@ impl Session {
 }
 
 #[tauri::command]
+pub async fn files_home(target: Target) -> Result<String, AppError> {
+    let mut session = Session::open(&target, None).await?;
+    let result = async {
+        let name = session.raw.realpath(".").await.map_err(sftp_error)?;
+        let home = name.files.first().ok_or_else(|| {
+            AppError::new(ErrorKind::Remote, "SFTP did not return a home directory")
+        })?;
+        checked_path(&home.filename, false)
+    }
+    .await;
+    session.finish(result).await
+}
+
+#[tauri::command]
 pub async fn files_list(target: Target, path: String) -> Result<Vec<Entry>, AppError> {
     let path = checked_path(&path, false)?;
     let mut session = Session::open(&target, None).await?;

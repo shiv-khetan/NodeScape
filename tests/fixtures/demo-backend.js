@@ -181,6 +181,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     if (cmd === 'plugin:dialog|open') return 'C:\\synthetic\\upload.txt';
     if (cmd === 'plugin:dialog|save') return 'C:\\synthetic\\' + args.options.defaultPath;
     if (cmd === 'operation_cancel') { const job = transferJobs.get(args.id); if (job) { transferJobs.delete(args.id); job.reject({ kind: 'cancelled', message: 'Transfer cancelled' }); } return !!job; }
+    if (cmd === 'files_home') return '/';
     if (cmd === 'files_list') {
       if (path === '/denied') fileError('permission_denied', 'Permission denied');
       if (path !== '/' && requireFile(path).kind !== 'dir') fileError('remote', 'Not a directory');

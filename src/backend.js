@@ -42,6 +42,7 @@ export const terminalResize = (id, cols, rows) => invoke('terminal_resize', { id
 export const terminalAck = (id, bytes) => invoke('terminal_ack', { id, bytes });
 export const terminalClose = id => invoke('terminal_close', { id });
 
+export const filesHome = target => invoke('files_home', { target });
 export const filesList = (target, path) => invoke('files_list', { target, path });
 export const fileMkdir = (target, path) => invoke('file_mkdir', { target, path });
 export const fileCreate = (target, path) => invoke('file_create', { target, path });

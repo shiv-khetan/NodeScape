@@ -2,6 +2,8 @@
 const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: 'tests',
+  testIgnore: 'app/**',
+  projects: [{ name: 'frontend' }],
   fullyParallel: true,
   workers: 4,
   reporter: [['list']],

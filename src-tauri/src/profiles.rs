@@ -38,6 +38,10 @@ fn invalid(message: &str) -> AppError {
     AppError::new(ErrorKind::InvalidInput, message)
 }
 pub(crate) fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, AppError> {
+    #[cfg(debug_assertions)]
+    if let Some(dir) = std::env::var_os("NODESCAPE_CONFIG_DIR") {
+        return Ok(PathBuf::from(dir));
+    }
     app.path().app_config_dir().map_err(local)
 }
 fn validate(profile: &Profile) -> Result<(), AppError> {

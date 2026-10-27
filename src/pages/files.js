@@ -15,7 +15,7 @@ let view, events;
 
 export function load(target) {
   if (!view || JSON.stringify(view.target) !== JSON.stringify(target)) {
-    view = { target: { ...target }, path: '/', entries: [], transfers: [], editor: null };
+    view = { target: { ...target }, path: '', entries: [], transfers: [], editor: null };
   }
   return view;
 }
@@ -70,7 +70,10 @@ export function mount(el) {
     const sequence = ++listSequence;
     $('#files-error').hidden = true; $('#files-recursive').hidden = true; recursiveCandidate = null;
     $('#files-entries').setAttribute('aria-busy', 'true');
+    el.querySelectorAll('.files-tools button:not([data-file-action="refresh"])').forEach(button => { button.disabled = !model.path; });
     try {
+      if (!path) path = await backend.filesHome(model.target);
+      if (!valid() || sequence !== listSequence) return;
       if (!path.startsWith('/') || /[\0\r\n]/.test(path) || path.split('/').some(p => p === '.' || p === '..')) throw { message: 'Use an absolute remote path without dot segments.' };
       const entries = await backend.filesList(model.target, path);
       if (!valid() || sequence !== listSequence) return;
@@ -80,7 +83,10 @@ export function mount(el) {
     } catch (err) {
       if (valid() && sequence === listSequence) error(err);
     } finally {
-      if (valid() && sequence === listSequence) $('#files-entries').removeAttribute('aria-busy');
+      if (valid() && sequence === listSequence) {
+        $('#files-entries').removeAttribute('aria-busy');
+        el.querySelectorAll('.files-tools button:not([data-file-action="refresh"])').forEach(button => { button.disabled = !model.path; });
+      }
     }
   }
   function drawEditor() {

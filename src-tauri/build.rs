@@ -1,3 +1,37 @@
 fn main() {
-    tauri_build::build()
+    let attributes =
+        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "accounts_read",
+            "account_action",
+            "network_read",
+            "profiles_list",
+            "profile_save",
+            "profile_remove",
+            "ssh_config_save",
+            "environment_check",
+            "public_key_read",
+            "connection_test",
+            "terminal_open_kind",
+            "hosts",
+            "query",
+            "logs",
+            "services_read",
+            "service_action",
+            "operation_cancel",
+            "terminal_open",
+            "terminal_input",
+            "terminal_resize",
+            "terminal_ack",
+            "terminal_close",
+            "files_home",
+            "files_list",
+            "file_mkdir",
+            "file_create",
+            "file_rename",
+            "file_delete",
+            "file_read_text",
+            "file_write_text",
+            "transfer_start",
+        ]));
+    tauri_build::try_build(attributes).expect("failed to build NodeScape");
 }

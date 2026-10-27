@@ -181,6 +181,7 @@ fn main() {
             terminal::terminal_resize,
             terminal::terminal_ack,
             terminal::terminal_close,
+            files::files_home,
             files::files_list,
             files::file_mkdir,
             files::file_create,

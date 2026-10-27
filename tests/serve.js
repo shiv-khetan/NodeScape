@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
+const csp = require('../src-tauri/tauri.conf.json').app.security.csp;
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };
 http.createServer((req, res) => {
   let name;
@@ -15,7 +16,7 @@ http.createServer((req, res) => {
   if (!file.startsWith(base + path.sep)) { res.writeHead(403).end(); return; }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404).end(); return; }
-    res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Content-Security-Policy': csp });
     res.end(data);
   });
 }).listen(Number(process.env.NODESCAPE_TEST_PORT) || 4174, '127.0.0.1');
