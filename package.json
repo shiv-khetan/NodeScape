@@ -2,6 +2,7 @@
   "name": "nodescape",
   "private": true,
   "license": "Apache-2.0",
+  "author": "Shivam Khetan",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

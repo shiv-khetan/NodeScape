@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Desktop control panel for Linux servers over SSH"
 license = "Apache-2.0"
+authors = ["Shivam Khetan"]
 # Keep the test helper from ever being selected as the application.
 default-run = "nodescape"
 
