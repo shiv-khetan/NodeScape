@@ -12,13 +12,13 @@ test.describe('overview with server data', () => {
   });
 
   test('shows the address this session connected to, not the first LAN IP', async ({ page }) => {
-    await expect(page.locator('.hostchip')).toHaveText('testbox · 10.0.0.2');
+    await expect(page.locator('.page-meta')).toContainText('testbox · 10.0.0.2 · updated');
   });
 
   test('computes CPU, load and uptime', async ({ page }) => {
     await expect(page.locator('.stats .on b')).toHaveText('50%');
     await expect(page.locator('.gauge .c b')).toHaveText('13%'); // load 0.50 on 4 cores
-    await expect(page.locator('.insight .huge')).toHaveText('1d 1h');
+    await expect(page.locator('.uptime-card .huge')).toHaveText('1d 1h');
   });
 
   test('labels binary sizes as GiB', async ({ page }) => {
@@ -34,18 +34,18 @@ test.describe('overview with server data', () => {
   });
 
   test('counts running and failed services, ignoring not-found units', async ({ page }) => {
-    await expect(page.locator('.toolbar .tag').nth(0)).toHaveText('2 running');
-    await expect(page.locator('.toolbar .tag').nth(1)).toHaveText('1 failed');
+    await expect(page.locator('.problems h2')).toHaveText('1 service failed');
+    await expect(page.locator('.svcs .status.ok')).toHaveCount(2);
   });
 
   test('uptime card lists Tailscale but not down interfaces', async ({ page }) => {
-    const p = page.locator('.insight p');
+    const p = page.locator('.uptime-card p', { hasText: 'kernel' });
     await expect(p).toContainText('tailscale0 100.64.0.2/32');
     await expect(p).not.toContainText('docker0');
   });
 
   test('highlights error lines in the journal card', async ({ page }) => {
-    await expect(page.locator('.timeline .ev.err')).toContainText('repository unreachable');
+    await expect(page.locator('.timeline .logrow.err')).toContainText('repository unreachable');
   });
 });
 
@@ -100,7 +100,7 @@ test('unknown host key shows how to trust it safely', async ({ page }) => {
 test('other connection errors show the ssh message', async ({ page }) => {
   await openServer(page, { snapshot: { error: { kind: 'timeout', message: 'ssh: connect to host 10.0.0.2 port 22: Connection timed out' } } });
   await expect(page.locator('.error')).toContainText('Connection timed out');
-  await expect(page.locator('.empty')).toContainText('works in a terminal');
+  await expect(page.locator('.empty')).toContainText('Check the network or Tailscale connection to testbox');
 });
 
 test('settings default applies to new servers and leaves saved targets unchanged', async ({ page }) => {
@@ -141,7 +141,7 @@ test('sudo_required opens the one-action password dialog', async ({ page }) => {
   await openServer(page, { snapshot: F.SNAPSHOT, service_action: { error: { kind: 'sudo_required', message: 'Elevation is required.' } } });
   await nav(page, 'Services');
   await clickService(page,'start','backup.service');
-  const dialog = page.getByRole('dialog', { name: 'Administrator permission' });
+  const dialog = page.locator('.confirm-dialog');
   await expect(dialog).toContainText('used once');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });

@@ -29,7 +29,7 @@ function draw(s) {
     const info = s.environment;
     panel.innerHTML = '<h2>Check your environment</h2><p>NodeScape uses OpenSSH on this computer. Keys and passwords stay under your control.</p><div data-environment role="status">'+(info ? '<dl><dt>SSH</dt><dd>'+esc(info.ssh.path)+'<br>'+esc(info.ssh.version || info.ssh.error)+'</dd><dt>Key generation</dt><dd>'+esc(info.sshKeygen.path)+'<br>'+esc(info.sshKeygen.version || info.sshKeygen.error)+'</dd><dt>SSH folder</dt><dd>'+(info.sshDirExists?'Found':'No ~/.ssh folder yet')+'</dd><dt>Public keys</dt><dd>'+esc(info.publicKeys.join(', ') || 'No public key files found')+'</dd></dl>' : 'Checking OpenSSH…')+'</div>'+(state.profileWarning?'<p class="notice">'+esc(state.profileWarning)+'</p>':'')+'<div class="setup-actions">'+button('Check again','check')+'<button class="pill primary" data-action="next" '+(!info || info.ssh.error?'disabled':'')+'>Continue</button></div>';
   } else if (s.step === 1) {
-    panel.innerHTML = '<h2>Choose how to connect</h2><p>Use an alias you already have, or create a server in NodeScape’s own SSH config.</p><div class="segtabs"><button type="button" data-action="existing" class="'+(s.mode==='existing'?'on':'')+'">Existing SSH config</button><button type="button" data-action="new" class="'+(s.mode==='new'?'on':'')+'">New server</button></div><form data-details><div class="setup-fields"><div>'+field('setup-name','Server name',s.name,'required maxlength="120"')+'</div>'+(s.mode==='existing' ?
+    panel.innerHTML = '<h2>Choose how to connect</h2><p>Use an alias you already have, or create a server in NodeScape’s own SSH config.</p><div class="segtabs" role="group" aria-label="Connection method"><button type="button" data-action="existing" class="'+(s.mode==='existing'?'on':'')+'">Existing SSH config</button><button type="button" data-action="new" class="'+(s.mode==='new'?'on':'')+'">New server</button></div><form data-details><div class="setup-fields"><div>'+field('setup-name','Server name',s.name,'required maxlength="120"')+'</div>'+(s.mode==='existing' ?
       '<div>'+field('setup-config','SSH config file',s.config,'placeholder="Blank uses ~/.ssh/config"')+button('Choose config','config')+'</div><div><label for="setup-alias">SSH alias</label><select class="field" id="setup-alias" required><option value="">Choose an alias</option>'+s.aliases.map(a=>'<option value="'+esc(a)+'" '+(a===s.alias?'selected':'')+'>'+esc(a)+'</option>').join('')+'</select></div>' :
       '<div>'+field('setup-alias','Alias',s.alias,'required placeholder="workshop"')+'</div><div>'+field('setup-hostname','Hostname',s.hostname,'required placeholder="box.example"')+'</div><div>'+field('setup-user','SSH user',s.user,'required autocomplete="off"')+'</div><div>'+field('setup-port','Port',s.port,'required type="number" min="1" max="65535"')+'</div><div class="setup-wide">'+field('setup-identity','Identity file',s.identity,'required placeholder="Absolute path to a private key"')+'<div class="setup-actions">'+button('Choose existing key','identity')+button('New key path','new-path')+button('Generate key','keygen')+'</div><p>To generate a key, choose a new file path. Enter its passphrase only in the terminal below.</p></div>')+'</div><div data-setup-terminal></div><div class="setup-actions">'+button('Back','back')+'<button class="pill primary" type="submit" '+(s.generating?'disabled':'')+'>Continue</button></div></form>';
     panel.querySelector('[data-details]').onsubmit = async event => {
@@ -94,7 +94,7 @@ async function act(s,action) {
     try { await backend.connectionTest(s.target,s.operationId); if(s.disposed)return; s.tested=true; draw(s); }
     finally { s.operationId=null; if(!s.tested && !s.disposed) s.el.querySelector('[data-test-status]').textContent='Connection did not succeed. Check the error and try again.'; }
   }
-  if(action==='save' && s.tested) { const profile=await backend.profileSave({id:'',name:s.name,host:s.target.host,config:s.target.config}); if(!s.disposed) await s.context.profilesChanged(profile,true); }
+  if(action==='save' && s.tested) { const profile=await backend.profileSave({id:s.profileId || '',name:s.name,host:s.target.host,config:s.target.config}); if(!s.disposed) await s.context.profilesChanged(profile,true); }
 }
 async function setupTerminal(s,kind,args,done=()=>{}) {
   cleanupTerminal(s);
@@ -120,7 +120,11 @@ async function setupTerminal(s,kind,args,done=()=>{}) {
 }
 export function mount(el,context) {
   const s=current={el,context,step:0,mode:'existing',name:'',config:state.defaultConfig || '',alias:'',aliases:[],aliasEpoch:0,hostname:'',user:'',port:'22',identity:'',publicPath:'',environment:null,tested:false,disposed:false,pending:false};
-  draw(s); attempt(s,async()=>{s.environment=await backend.environmentCheck();draw(s);});
+  const profile = state.trustProfile; state.trustProfile = null;
+  if (profile) {
+    Object.assign(s, { step:2, name:profile.name, alias:profile.host, config:profile.config || '', target:{host:profile.host,config:profile.config}, profileId:profile.id });
+    draw(s); attempt(s, () => setupTerminal(s,'trust_host',{}));
+  } else { draw(s); attempt(s,async()=>{s.environment=await backend.environmentCheck();draw(s);}); }
 }
 export function dispose() {
   if(!current)return; const s=current; s.disposed=true; cleanupTerminal(s); if(s.operationId)backend.cancel(s.operationId).catch(()=>{});current=null;

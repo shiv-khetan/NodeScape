@@ -107,13 +107,10 @@ for (const action of ['stop','restart','disable']) test(action + ' confirms cont
   expect(await page.evaluate(() => window.__calls.filter(c=>c.cmd==='service_action').length)).toBe(1);
 });
 
-test('overview status links open the matching Services filter', async ({ page }) => {
-  for (const filter of ['running','failed']) {
-    await nav(page,'Overview');
-    await page.locator('[data-service-filter="'+filter+'"]').click();
-    await expect(page.locator('[data-state="'+filter+'"]')).toHaveAttribute('aria-pressed','true');
-    expect(await page.locator('tbody tr:visible').evaluateAll(rows=>rows.every(r=>r.dataset.st===rows[0].dataset.st))).toBe(true);
-  }
+test('Overview links to the full Services list',async({page})=>{
+  await nav(page,'Overview');await page.getByRole('button',{name:'View all services',exact:true}).click();
+  await expect(page.locator('[data-state="all"]')).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('tbody tr:visible')).toHaveCount(16);
 });
 
 test('file, user and server cancellation never invokes a mutation', async ({ page }) => {
@@ -143,7 +140,7 @@ test('settings, file naming, user forms and sudo share accessible dialog styles'
   await page.getByRole('button',{name:'New file',exact:true}).click(); await checkDialog(page); await page.getByRole('button',{name:'Cancel',exact:true}).click();
   await nav(page,'Users'); await page.getByRole('button',{name:'Add user',exact:true}).click(); await checkDialog(page);
   await page.getByLabel('User name',{exact:true}).fill('riley'); await page.getByRole('button',{name:'Create user',exact:true}).click();
-  await expect(page.locator('.sudo-dialog')).toBeVisible(); await expect(page.locator('.sudo-dialog [type="submit"]')).toHaveText('Create user');
+  await expect(page.locator('.confirm-dialog')).toBeVisible(); await expect(page.locator('.confirm-dialog [type="submit"]')).toHaveText('Create user');
   await checkDialog(page); await page.getByRole('button',{name:'Cancel',exact:true}).click();
 });
 
@@ -163,12 +160,13 @@ test('a target change while confirmation is open cancels the service mutation', 
   expect(await page.evaluate(()=>window.__calls.filter(c=>c.cmd==='service_action').length)).toBe(0);
 });
 
-test('error recovery retries, opens the selected editor, and opens terminal', async ({page})=>{
+test('error recovery retains old data, retries and opens the selected editor',async({page})=>{
   await page.evaluate(()=>{const invoke=window.__TAURI__.core.invoke;window.__TAURI__.core.invoke=(cmd,args)=>cmd==='query'&&args.what==='snapshot'?Promise.reject({kind:'timeout',message:'ssh: synthetic connection timed out'}):invoke(cmd,args);});
-  await page.locator('#refresh').click(); await expect(page.locator('.empty pre')).toHaveText('ssh: synthetic connection timed out');
-  await page.getByRole('button',{name:'Retry',exact:true}).click(); await expect(page.locator('.empty pre')).toHaveText('ssh: synthetic connection timed out');
-  await page.getByRole('button',{name:'Edit server',exact:true}).click(); await expect(page.getByLabel('SSH target')).toHaveValue('nas-01');
-  await nav(page,'Overview'); await page.getByRole('button',{name:'Open terminal',exact:true}).click(); await expect(page.locator('[data-terminal-status]')).toHaveText('Connected');
+  await page.locator('#refresh').click();await expect(page.locator('.action-alert')).toContainText('ssh: synthetic connection timed out');
+  await expect(page.locator('[data-freshness]')).toContainText('refresh failed');
+  await page.locator('#refresh').click();await expect(page.locator('.action-alert')).toContainText('ssh: synthetic connection timed out');
+  await nav(page,'Services');await nav(page,'Overview');await expect(page.locator('[data-freshness]')).toContainText('refresh failed');
+  await page.locator('#manageServers').click();await page.getByRole('button',{name:'Edit',exact:true}).first().click();await expect(page.getByLabel('SSH target')).toHaveValue('nas-01');
 });
 
 test('recursive file deletion uses an explicit checkbox in the same confirm dialog', async ({page})=>{

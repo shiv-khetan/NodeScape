@@ -8,7 +8,7 @@ test('overview shows every card', async ({ page }) => {
   for (const title of ['CPU', 'Load', 'Memory', 'CPU history', 'Network in', 'Network out', 'Services', 'Recent journal']) {
     await expect(page.locator('.card h2', { hasText: new RegExp(`^${title}$`) })).toBeVisible();
   }
-  await expect(page.locator('.hostchip')).toContainText('nas-01');
+  await expect(page.locator('.page-meta')).toContainText('nas-01');
   await expect(page.locator('.step svg')).toBeVisible();
   await expect(page.locator('.dots').first()).toBeVisible();
 });
@@ -77,5 +77,5 @@ test('log line count can be changed', async ({ page }) => {
 
 test('live refresh can be paused', async ({ page }) => {
   await page.locator('[data-act="live"]').click();
-  await expect(page.locator('[data-act="live"]')).toContainText('Paused');
+  await expect(page.locator('[data-act="live"]')).toHaveText('Resume live updates');
 });

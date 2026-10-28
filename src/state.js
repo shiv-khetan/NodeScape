@@ -8,7 +8,7 @@ export const state = {
   host: '', config: null, profileId: '', profiles: [], profileWarning: '',
   defaultConfig: (store('defaultSshConfig') ?? store('sshConfig')) || null,
   view: 'overview', live: true, busy: false, generation: 0,
-  snap: null, histories: new Map(),
+  snap: null, snapshotAt: null, snapshotError: null, histories: new Map(),
   svcFilter: '', svcState: 'all', logUnit: '', logLines: 300,
 };
 export const currentTarget = () => ({ host: state.host, config: state.config });
@@ -24,7 +24,7 @@ export function selectTarget(host, config = state.config) {
   state.generation++;
   state.host = host;
   state.config = config;
-  state.snap = null;
+  state.snap = null; state.snapshotAt = null; state.snapshotError = null;
   state.svcFilter = ''; state.svcState = 'all'; state.logUnit = ''; state.logLines = 300;
 }
 export function acceptSnapshot(request, snapshot) {
@@ -36,6 +36,7 @@ export function acceptSnapshot(request, snapshot) {
     tx: [...previous.tx, snapshot.tx].slice(-14),
   });
   state.snap = snapshot;
+  state.snapshotAt = Date.now(); state.snapshotError = null;
 }
 
 export function selectProfile(profile) {

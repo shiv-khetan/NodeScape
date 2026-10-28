@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { esc, head, segTabs, search, dateTime } from '../ui/dom.js';
+import { esc, head, segTabs, search, dateTime, plural } from '../ui/dom.js';
 
 const text = value => typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 const show = value => esc(text(value) || '—');
@@ -25,12 +25,11 @@ export function render(input) {
     const isDefault = ['default', '0.0.0.0/0', '::/0'].includes(r.dst);
     return '<tr class="' + (isDefault ? 'network-default' : '') + '"><td>' + show(r.dst) + '</td><td>' + family + '</td><td>' + show(r.gateway) + '</td><td>' + show(r.dev) + '</td><td>' + show(r.metric) + '</td></tr>';
   }).join('');
-  const count = (n, one, many = one + 's') => n + ' ' + (n === 1 ? one : many);
   const meta = [esc(state.host), 'read-only',
-    interfaces ? count(interfaces.filter(i => i.operstate === 'UP').length, 'interface') + ' up' : 'interfaces unavailable',
-    ports ? count(ports.length, 'listening port') : 'ports unavailable',
+    interfaces ? plural(interfaces.filter(i => i.operstate === 'UP').length, 'interface') + ' up' : 'interfaces unavailable',
+    ports ? plural(ports.length, 'listening port') : 'ports unavailable',
     'firewall ' + esc(String(firewallState).toLowerCase()),
-    tailscale ? count(tailscale.peers.filter(p => p.Online === true).length, 'Tailscale peer') + ' online' : 'Tailscale unavailable'].join(' · ');
+    tailscale ? plural(tailscale.peers.filter(p => p.Online === true).length, 'Tailscale peer') + ' online' : 'Tailscale unavailable'].join(' · ');
   const portTools = search('network-filter','Search listening ports',filter) + segTabs('protocol', protocol, [['all', 'All '+(ports?.length ?? '—')], ['tcp', 'TCP '+(ports?.filter(p=>p.protocol==='tcp').length ?? '—')], ['udp', 'UDP '+(ports?.filter(p=>p.protocol==='udp').length ?? '—')]]);
   return head('Network', meta) + '<section class="grid network">' +
     '<section id="network-interfaces" class="card full"><div class="card-top"><h2>Interfaces</h2></div><div class="network-interfaces">' +

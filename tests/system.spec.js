@@ -35,8 +35,8 @@ test('sensors JSON shows hottest reading, thresholds and escaped labels', async 
   const temps = card(page, 'Temperatures');
   await expect(temps.locator('.temp-value')).toHaveText('78 °C');
   await expect(temps.locator('.meter')).toHaveCount(3);
-  await expect(temps.locator('.meter').first()).toContainText('Package id 0');
-  await expect(temps.locator('.meter').first().locator('.track i')).toHaveClass(/warm/);
+  await expect(temps.locator('.meter').first()).toContainText('Package');
+  await expect(temps.locator('.meter').first().locator('.track i')).toHaveClass(/neutral/);
   await expect(temps.locator('img')).toHaveCount(0);
   expect(await page.evaluate(() => window.sensorInjected)).toBeUndefined();
   expect((await parsed(page)).temps[0]).toMatchObject({ label: 'coretemp-isa-0000 · Package id 0', celsius: 78, high: 80, crit: 100 });
@@ -126,7 +126,7 @@ test('counter resets create unavailable samples and charts recover', async ({ pa
   await expect(page.locator('.dotcard .huge')).toHaveText(['Unavailable', 'Unavailable']);
   await page.locator('#refresh').click();
   await expect.poll(async () => (await page.evaluate(async () => (await import('/state.js')).history().cpu)).length).toBe(2);
-  await expect(card(page, 'CPU history')).toContainText('CPU history unavailable');
+  await expect(card(page, 'CPU history')).toContainText('Collecting samples (2 of 5)…');
   expect(await parsed(page)).toMatchObject({ cpu: null, rx: null, tx: null });
   await page.evaluate(async valid => {
     const old = window.__TAURI__.core.invoke;

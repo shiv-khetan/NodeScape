@@ -7,11 +7,11 @@ const required = { error: { kind: 'sudo_required', message: 'sudo: a password is
 const wrong = { error: { kind: 'sudo_wrong_password', message: 'Sorry, try again.' } };
 const secret = "synthetic-sudo-'$<secret>";
 const calls = page => page.evaluate(() => window.__calls.filter(c => c.cmd === 'service_action'));
-const dialog = page => page.getByRole('dialog', { name: 'Administrator permission' });
-const password = page => dialog(page).getByLabel('Sudo password');
+const dialog = page => page.locator('.confirm-dialog');
+const password = page => dialog(page).getByLabel(/Administrator password for/);
 
-async function open(page, actions = ['ok']) {
-  await openServer(page, { snapshot: F.SNAPSHOT, service_action: actions });
+async function open(page, actions = ['ok'], running = false) {
+  await openServer(page, { snapshot: running ? F.SNAPSHOT : F.SNAPSHOT.replace('nginx.service loaded active running','nginx.service loaded inactive dead'), service_action: actions });
   await nav(page, 'Services');
   await expect(page.locator('.hero h1')).toHaveText('Services');
 }
@@ -19,7 +19,7 @@ async function start(page) {
   await clickService(page,'start','nginx.service');
 }
 async function clean(page) {
-  await expect(page.locator('.sudo-dialog')).toHaveCount(0);
+  await expect(page.locator('.confirm-dialog [type="password"]:visible')).toHaveCount(0);
   expect(await page.evaluate(value => ({
     html: document.documentElement.outerHTML.includes(value),
     inputs: [...document.querySelectorAll('input')].some(i => i.value.includes(value)),
@@ -27,14 +27,11 @@ async function clean(page) {
   }), secret)).toEqual({ html: false, inputs: false, stored: false });
 }
 
-test('start stop and restart succeed without a password dialog', async ({ page }) => {
-  await open(page, ['ok', 'ok', 'ok']);
-  for (const action of ['start', 'stop', 'restart']) {
-    await clickService(page,action,'nginx.service');
-    await expect(page.locator('#toast')).toContainText(({start:'Started',stop:'Stopped',restart:'Restarted'}[action])+' nginx.service on testbox');
-  }
-  expect((await calls(page)).map(c => c.args.password)).toEqual([null, null, null]);
-  await clean(page);
+for (const action of ['start','stop','restart']) test(action + ' succeeds without requesting a password', async ({page})=>{
+  await open(page,['ok'],action !== 'start');
+  await clickService(page,action,'nginx.service');
+  await expect(page.locator('#toast')).toContainText(({start:'Started',stop:'Stopped',restart:'Restarted'}[action])+' nginx.service on testbox');
+  expect((await calls(page)).map(c=>c.args.password)).toEqual([null]);await clean(page);
 });
 
 test('password is used once and cleared immediately while the retry is pending', async ({ page }) => {
@@ -50,7 +47,7 @@ test('password is used once and cleared immediately while the retry is pending',
   await dialog(page).getByRole('button', { name: 'Start nginx.service' }).click();
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
   expect(await page.evaluate(() => window.__submittedSudoField.value)).toBe('');
-  await clean(page);
+  expect(await page.evaluate(value => !document.documentElement.outerHTML.includes(value) && !JSON.stringify(localStorage).includes(value) && [...document.querySelectorAll('input')].every(i=>!i.value.includes(value)),secret)).toBe(true);
   await page.evaluate(() => window.__pending.shift()());
   await expect(page.locator('#toast')).toContainText('Started nginx.service on testbox');
   expect((await calls(page)).map(c => c.args.password)).toEqual([null, '[redacted]']);
@@ -117,8 +114,8 @@ test('a later action starts without a cached password', async ({ page }) => {
 test('permission errors are shown as text without prompting or retrying', async ({ page }) => {
   await open(page, [{ error: { kind: 'permission_denied', message: '<img src=x onerror=alert(1)> denied' } }]);
   await start(page);
-  await expect(page.locator('#toast')).toHaveText('<img src=x onerror=alert(1)> denied');
-  await expect(page.locator('#toast img')).toHaveCount(0);
+  await expect(page.locator('.action-alert')).toContainText('<img src=x onerror=alert(1)> denied');
+  await expect(page.locator('.action-alert img')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
   await clean(page);
 });
@@ -128,7 +125,7 @@ test('a non-password failure after submission is never retried', async ({ page }
   await start(page);
   await password(page).fill(secret);
   await password(page).press('Enter');
-  await expect(page.locator('#toast')).toHaveText('SSH operation timed out');
+  await expect(page.locator('.action-alert')).toContainText('SSH operation timed out');
   expect(await calls(page)).toHaveLength(2);
   await clean(page);
 });

@@ -3,6 +3,7 @@ import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } 
 import { initMenus } from './ui/menu.js';
 import { cancelConfirm } from './ui/confirm.js';
 import { $, esc } from './ui/dom.js';
+import { errorAdvice, canOpenTerminal, hostKeyError, showError } from './ui/errors.js';
 import { parseSnapshot } from './ui/parse.js';
 import * as overview from './pages/overview.js';
 import * as services from './pages/services.js';
@@ -34,6 +35,7 @@ const routes = {
 function updateNavigation(view) {
   document.querySelectorAll('.sidebar button').forEach(button => {
     const route = button.dataset.view || ({addServer:'onboarding',manageServers:'servers'}[button.id]);
+    if (button.dataset.view) { const disabled = backend.available() && !state.profiles.length; button.disabled = disabled; button.setAttribute('aria-disabled', String(disabled)); }
     const selected = route === view;
     button.classList.toggle('on', selected);
     if (selected) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
@@ -43,7 +45,8 @@ let mounted;
 function dispose() { cancelConfirm(); mounted?.dispose?.(); mounted = null; }
 
 async function refresh(fromTimer) {
-  if (fromTimer === true && state.busy) return;
+  if (fromTimer === true && (state.busy || document.querySelector('.confirm-dialog[open]'))) return;
+  if (mounted === logs) logs.prepareRefresh(main);
   if (!state.host && state.view !== 'servers') state.view = 'onboarding';
   updateNavigation(state.view);
   const terminalChanged = terminal.targetChanged();
@@ -75,13 +78,19 @@ async function refresh(fromTimer) {
     if (!isCurrent(request)) return;
     dispose();
     const host = request.target.host;
-    const hostKey = error.kind === 'host_key_unknown' || error.kind === 'host_key_changed';
-    main.innerHTML = `<div class="empty"><h1>Can't reach ${esc(host)}</h1><pre class="error">${esc(error.message)}</pre>
-      <p>${hostKey
-        ? `The server's host key isn't trusted yet, or it changed. NodeScape never accepts host keys on its own: connect once with <code>ssh ${esc(host)}</code> in a terminal and check the fingerprint.`
-        : `Check that <code>ssh ${esc(host)}</code> works in a terminal without a password prompt.`}</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button><button data-go="terminal">Open terminal</button></div></div>`;
-    main.querySelector('[data-retry]').onclick = () => refresh();
-    main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
+    if (request.view === 'overview' && state.snap) {
+      state.snapshotError = error;
+      main.innerHTML = overview.render(state.snap);
+      mounted = overview;
+      overview.mount(main, { refresh, go, profilesChanged });
+      showError(error, main, host);
+    } else {
+      updateNavigation(null);
+      main.innerHTML = '<div class="empty"><h1>Can\'t reach ' + esc(host) + '</h1><pre class="error" role="alert">' + esc(error.message) + '</pre><p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></div>';
+      main.querySelector('[data-retry]').onclick = () => refresh();
+      main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
+    }
+
   } finally {
     if (isCurrent(request)) {
       state.busy = false;
@@ -103,6 +112,7 @@ $('#nav').addEventListener('click', e => {
 });
 main.addEventListener('click', e => {
   const ds = e.target.closest('button')?.dataset;
+  if (ds && 'approveHost' in ds) { state.trustProfile = state.profiles.find(p => p.id === state.profileId); go('onboarding'); return; }
   if (ds?.serviceFilter) { state.svcState = ds.serviceFilter; state.svcFilter = ''; }
   if (ds?.go) go(ds.go);
   if (ds?.unit) { state.logUnit = ds.unit; go('logs'); }

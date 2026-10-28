@@ -18,7 +18,10 @@ async function openDemo(page) {
   await page.goto(APP);
   await expect(page.locator('.hero h1')).toHaveText('Overview');
   // Collect genuine fixture samples so chart assertions cover populated charts.
-  await page.locator('#refresh').click();
+  for (let n = 2; n <= 5; n++) {
+    await page.locator('#refresh').click();
+    await expect.poll(() => page.evaluate(async () => (await import('/state.js')).history().cpu.length)).toBe(n);
+  }
   await expect(page.locator('.step svg')).toBeVisible();
 }
 async function openServer(page, responses, host = 'testbox') {

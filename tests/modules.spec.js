@@ -34,7 +34,7 @@ test('production has no demo script, host, globals or seeded history', async ({ 
   await expect(page.locator('#hosts option[value="demo"]')).toHaveCount(0);
   expect(await page.evaluate(() => [typeof window.demoInvoke, typeof window.demoHistory])).toEqual(['undefined', 'undefined']);
   expect((await readState(page)).histories.map(([, h]) => h.cpu)).toEqual([[50]]);
-  await expect(page.getByText('Collecting samples…')).toBeVisible();
+  await expect(page.locator('.cpu .collecting')).toBeVisible();
 });
 
 test('without Tauri the desktop requirement is clear on every route', async ({ page }) => {

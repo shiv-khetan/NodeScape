@@ -47,7 +47,10 @@ test('CSP header blocks inline script, eval and external connections; charts and
   const response = await page.goto(APP);
   expect(response.headers()['content-security-policy']).toBe(config.app.security.csp);
   await expect(page.locator('.hero h1')).toHaveText('Overview');
-  await page.locator('#refresh').click();
+  for (let n=2;n<=5;n++) {
+    await page.locator('#refresh').click();
+    await expect.poll(()=>page.evaluate(async()=>(await import('/state.js')).history().cpu.length)).toBe(n);
+  }
   await expect(page.locator('.step svg')).toBeVisible();
   expect(await page.locator('.bar.now i').evaluate(el => parseFloat(getComputedStyle(el).height))).toBeGreaterThan(0);
   const result = await page.evaluate(async () => {

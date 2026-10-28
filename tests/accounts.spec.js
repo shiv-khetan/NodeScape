@@ -47,20 +47,20 @@ test('filter searches users and groups and system toggle starts off', async ({ p
   await page.getByLabel('Show system accounts').check();
   await expect(row(page, 'root')).toBeVisible();
   await expect(row(page, 'daemon')).toContainText('No login');
-  await page.getByLabel('Filter users').fill('sudo');
+  await page.getByLabel('Filter users',{exact:true}).fill('sudo');
   await expect(page.locator('#accounts-users tbody tr:visible')).toHaveCount(1);
-  await page.getByLabel('Filter users').fill('ALICE');
+  await page.getByLabel('Filter users',{exact:true}).fill('ALICE');
   await expect(row(page, 'alice')).toBeVisible();
-  await page.getByLabel('Filter users').fill('no-match');
+  await page.getByLabel('Filter users',{exact:true}).fill('no-match');
   await expect(page.getByText('No users match this filter.')).toBeVisible();
 });
 
 test('create user prompts for sudo, clears the secret and refreshes', async ({ page }) => {
   await open(page);
   await add(page, 'newuser', 'team, sudo');
-  await expect(page.getByRole('dialog', { name: 'Administrator permission' })).toBeVisible();
-  await page.getByLabel('Sudo password').fill('synthetic-accounts-password');
-  await page.locator('.sudo-dialog button[type="submit"]').click();
+  await expect(page.locator('.confirm-dialog')).toBeVisible();
+  await page.getByLabel(/Administrator password for/).fill('synthetic-accounts-password');
+  await page.locator('.confirm-dialog button[type="submit"]').click();
   await expect(row(page, 'newuser')).toBeVisible();
   expect((await calls(page)).map(c => c.args.password)).toEqual([null, '[redacted]']);
   expect((await calls(page))[1].args.args).toEqual({ name: 'newuser', groups: ['team', 'sudo'] });
@@ -69,7 +69,7 @@ test('create user prompts for sudo, clears the secret and refreshes', async ({ p
 
 test('cancel sudo never creates a user', async ({ page }) => {
   await open(page); await add(page);
-  await page.getByRole('dialog', { name: 'Administrator permission' }).getByRole('button', { name: 'Cancel' }).click();
+  await page.locator('.confirm-dialog').getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(row(page, 'newuser')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
@@ -85,8 +85,8 @@ for (const action of ['Add group', 'Remove group']) {
   test(action + ' uses the fixed action and refreshes membership', async ({ page }) => {
     await open(page);
     await group(page, action, 'alice', action === 'Add group' ? 'extra' : 'team');
-    await page.getByLabel('Sudo password').fill('synthetic');
-    await page.locator('.sudo-dialog button[type="submit"]').click();
+    await page.getByLabel(/Administrator password for/).fill('synthetic');
+    await page.locator('.confirm-dialog button[type="submit"]').click();
     await expect(page.locator('#toast')).toContainText('completed');
     if (action === 'Add group') await expect(row(page, 'alice')).toContainText('extra');
     else await expect(row(page, 'alice').locator('[data-group-tag="team"]')).toHaveCount(0);
@@ -97,8 +97,8 @@ for (const action of ['Add group', 'Remove group']) {
 for (const home of [false, true]) {
   test('delete user with removeHome=' + home, async ({ page }) => {
     await open(page); await remove(page, home);
-    await page.getByLabel('Sudo password').fill('synthetic');
-    await page.locator('.sudo-dialog button[type="submit"]').click();
+    await page.getByLabel(/Administrator password for/).fill('synthetic');
+    await page.locator('.confirm-dialog button[type="submit"]').click();
     await expect(row(page, 'alice')).toHaveCount(0);
     expect((await calls(page)).at(-1).args.args).toEqual({ name: 'alice', removeHome: home });
   });
@@ -127,8 +127,8 @@ test('root current user and system accounts show refusal reasons', async ({ page
 
 test('duplicate name gets a clear refusal before a password prompt', async ({ page }) => {
   await open(page); await add(page, 'alice');
-  await expect(page.locator('#toast')).toContainText('already exists');
-  await expect(page.locator('.sudo-dialog')).toHaveCount(0);
+  await expect(page.locator('.action-alert')).toContainText('already exists');
+  await expect(page.locator('.confirm-dialog')).toHaveCount(0);
 });
 
 test('remote errors are text and outcome unknown refreshes without retry', async ({ page }) => {
@@ -136,8 +136,8 @@ test('remote errors are text and outcome unknown refreshes without retry', async
   await page.evaluate(() => { window.__accountsActionError = { kind: 'outcome_unknown', message: '<img src=x> disconnected' }; });
   const before = await page.evaluate(() => window.__calls.filter(c => c.cmd === 'accounts_read').length);
   await add(page);
-  await expect(page.locator('#toast')).toContainText('Outcome unknown');
-  await expect(page.locator('#toast img')).toHaveCount(0);
+  await expect(page.locator('.action-alert')).toContainText('disconnected');
+  await expect(page.locator('.action-alert img')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__calls.filter(c => c.cmd === 'accounts_read').length)).toBeGreaterThan(before);
   expect(await calls(page)).toHaveLength(1);
 });
@@ -146,8 +146,8 @@ test('backend refusal is displayed safely without retry', async ({ page }) => {
   await open(page);
   await page.evaluate(() => { window.__accountsActionError = { kind: 'permission_denied', message: 'Refused: <script>protected</script>' }; });
   await add(page);
-  await expect(page.locator('#toast')).toHaveText('Refused: <script>protected</script>');
-  await expect(page.locator('#toast script')).toHaveCount(0);
+  await expect(page.locator('.action-alert')).toContainText('Refused: <script>protected</script>');
+  await expect(page.locator('.action-alert script')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
 });
 
@@ -161,10 +161,10 @@ test('untrusted names, groups, home and shell are escaped', async ({ page }) => 
 
 test('switching target while sudo is open prevents the retry', async ({ page }) => {
   await open(page); await add(page);
-  await page.getByLabel('Sudo password').fill('synthetic');
+  await page.getByLabel(/Administrator password for/).fill('synthetic');
   await page.evaluate(async () => { const { selectTarget } = await import('/state.js'); selectTarget('other-testbox'); });
-  await page.locator('.sudo-dialog button[type="submit"]').click();
-  await expect(page.locator('.sudo-dialog')).toHaveCount(0);
+  await page.locator('.confirm-dialog button[type="submit"]').click();
+  await expect(page.locator('.confirm-dialog')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
 });
 

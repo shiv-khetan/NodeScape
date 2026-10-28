@@ -1,7 +1,15 @@
 import { state, history } from '../state.js';
-import { pct, avg, gib, rate, uptime, esc, stat, svcClass, tag, ICON } from '../ui/dom.js';
-import { parseLog, isErr } from '../ui/parse.js';
+import { pct, avg, gib, rate, uptime, esc, stat, tag, ICON, head, agoLabel, plural } from '../ui/dom.js';
+import { parseLog, isErr, temperatureLabels } from '../ui/parse.js';
 import { bars, gauge, stepChart, dotCard } from '../ui/charts.js';
+
+import { performServiceAction } from './services.js';
+
+export const meterClass = value => value >= 95 ? 'hot' : value >= 85 ? 'warm' : 'neutral';
+export function freshness() {
+  const ago = agoLabel(Math.max(0, Math.floor((Date.now() - state.snapshotAt) / 1000)));
+  return `<span data-freshness class="${state.snapshotError ? 'error' : ''}">${state.snapshotError ? 'Last updated ' + ago + ' · refresh failed' : 'updated ' + ago}</span>`;
+}
 
 export function render(d) {
   const hist = history(), { host, live } = state;
@@ -17,20 +25,14 @@ export function render(d) {
   const top = [...failed, ...running].slice(0, 6);
   const hasSwap = d.swap.length >= 3 && d.swap.every(v => Number.isFinite(v) && v >= 0) && d.swap[1] <= d.swap[0];
   const meters = [...(hasSwap && d.swap[0] > 0 ? [['Swap', d.swap[1], d.swap[0]]] : []), ...[...d.disks].sort((x, y) => y.size - x.size).slice(0, 3).map(x => [x.target, x.used, x.size])].filter(m => m[2]);
-  const stripes = ['violet', 'blue', 'green', 'pink'];
+  const errors = d.journalLimited ? [] : d.log.filter(isErr);
+  const problems = failed.length || errors.length;
+  const problemRow = problems ? `<article class="card full problems"><div class="card-top"><h2>${failed.length ? plural(failed.length, 'service') + ' failed' : plural(errors.length, 'recent journal error')}</h2><button class="ghost" data-go="services">View all services</button></div>${failed.map(u => `<div class="problem-row" data-problem-unit="${esc(u.unit)}"><div class="problem-unit"><b>${esc(u.unit)}</b><span class="muted">${esc(u.desc)}</span></div>${tag(u)}<div class="acts"><button data-svc="restart" data-u="${esc(u.unit)}">Restart</button><button data-unit="${esc(u.unit)}">Logs</button></div></div>`).join('')}${errors.length && failed.length ? `<div class="journal-problem"><span>${plural(errors.length, 'recent journal error')}</span><button class="ghost" data-go="logs">View logs</button></div>` : !failed.length ? '<button class="ghost" data-go="logs">View logs</button>' : ''}</article>` : `<div class="full health-line"><span class="all-clear tag status ok">All services running · no recent errors</span><button class="ghost" data-go="services">View all services</button></div>`;
 
   return `
-  <section class="hero">
-    <h1>Overview</h1>
-    <span class="hostchip" title="${esc(d.os)}">${esc(d.host)} · ${esc(d.ip || host)}</span>
-    <div class="toolbar">
-      <button class="tag status ok" data-go="services" data-service-filter="running">${running.length} running</button>
-      <button class="tag status ${failed.length ? 'bad' : ''}" data-go="services" data-service-filter="failed">${failed.length} failed</button>
-      <button class="tbtn" data-act="live" aria-pressed="${live}">${live ? ICON.pause + ' Live' : ICON.play + ' Paused'}</button>
-    </div>
-  </section>
-
-  <section class="grid">
+  ${head('Overview', esc(d.host) + ' · ' + esc(d.ip || host) + ' · ' + freshness(), '', '', '<button data-act="live" aria-pressed="' + live + '">' + (live ? ICON.pause + ' Pause live updates' : ICON.play + ' Resume live updates') + '</button>')}
+  <section class="grid overview-grid">
+    ${problemRow}
     <article class="card cpu">
       <div class="card-top"><h2>CPU</h2><button class="round" data-go="processes" title="Processes">${ICON.arrow}</button></div>
       <div class="stats">
@@ -40,7 +42,7 @@ export function render(d) {
     </article>
 
     <article class="card">
-      <div class="card-top"><h2>Load</h2><button class="round" data-act="refresh" title="Refresh now">${ICON.refresh}</button></div>
+      <div class="card-top"><h2>Load</h2></div>
       ${gauge(loadPct, d.load[0], d.cpus)}
     </article>
 
@@ -50,7 +52,7 @@ export function render(d) {
       <span class="muted">used · ${ca}% cache · ${fr}% free</span>` : '<p class="unavailable">Memory unavailable</p>'}
       ${!hasSwap ? '<p class="unavailable">Swap unavailable</p>' : d.swap[0] === 0 ? '<p class="unavailable">no swap</p>' : ''}
       ${!d.disks.length ? '<p class="unavailable">Disk usage unavailable</p>' : ''}
-      ${meters.map((m, i) => `<div class="meter"><div><span>${esc(m[0])}</span><b>${pct(m[1], m[2])}% of ${gib(m[2])}</b></div><div class="track"><i class="${stripes[i % 4]}" style="width:${pct(m[1], m[2])}%"></i></div></div>`).join('')}
+      ${meters.map((m, i) => `<div class="meter"><div><span>${esc(m[0])}</span><b>${pct(m[1], m[2])}% of ${gib(m[2])}</b></div><div class="track"><i class="${meterClass(pct(m[1], m[2]))}" style="width:${pct(m[1], m[2])}%"></i></div></div>`).join('')}
     </article>
 
     <article class="card history">
@@ -60,19 +62,18 @@ export function render(d) {
 
     ${dotCard('Network in', hist.rx, d.rx, 'green', rate)}
 
-    <article class="card insight">
-      <span class="tag">Uptime</span>
+    <article class="card uptime-card">
+      <div class="card-top"><h2>Uptime</h2></div>
       <b class="huge">${uptime(d.up)}</b>
-      <h3>${esc(d.host)} is up and reachable.</h3>
-      <p>${esc(d.os)} · kernel ${esc(d.kernel)}<br>${d.net.filter(n => n[0] !== 'lo' && n[1] !== 'DOWN').map(n => esc(`${n[0]} ${n[2] || ''}`)).join(' · ')}</p>
-      <div class="segline"><i></i><i></i><i></i></div>
+      <p class="muted">${esc(d.host)} is up and reachable.</p>
+      <p class="muted">${esc(d.os)} · kernel ${esc(d.kernel)}<br>${d.net.filter(n => n[0] !== 'lo' && n[1] !== 'DOWN').map(n => esc(n[0] + ' ' + (n[2] || ''))).join(' · ')}</p>
     </article>
 
     ${dotCard('Network out', hist.tx, d.tx, 'blue', rate)}
 
     <article class="card">
       <div class="card-top"><h2>Services</h2><button class="round" data-go="services" title="All services">${ICON.arrow}</button></div>
-      <div class="svcs">${top.map(u => `<button class="svc" data-unit="${esc(u.unit)}" title="Show logs"><span class="ic ${svcClass(u)}">${esc(u.unit[0])}</span><span class="nm">${esc(u.unit.replace(/\.service$/, ''))}</span>${tag(u)}</button>`).join('')}</div>
+      <div class="svcs">${top.map(u => `<button class="svc" data-unit="${esc(u.unit)}" title="Show logs"><span class="nm">${esc(u.unit.replace(/\.service$/, ''))}</span>${tag(u)}</button>`).join('')}</div>
     </article>
 
     <article class="card logs">
@@ -80,7 +81,7 @@ export function render(d) {
       ${d.journalLimited ? "<p class=\"notice journal-access\">Only this user's journal is visible. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</p>" : ''}
       <div class="timeline">${d.log.slice(-6).map(l => {
         const e = parseLog(l);
-        return `<div class="ev ${isErr(e.msg) ? 'err' : ''}"><time>${esc(e.time)}</time><div><b>${esc(e.unit)}</b><span>${esc(e.msg)}</span></div></div>`;
+        return `<div class="logrow ${isErr(e.msg) ? 'err' : ''}"><time>${esc(e.time)}</time><span class="tag">${esc(e.unit)}</span><span class="msg">${esc(e.msg)}</span></div>`;
       }).join('') || '<p class="unavailable">No journal entries available.</p>'}</div>
     </article>
 
@@ -88,32 +89,33 @@ export function render(d) {
   </section>`;
 }
 
-let events;
+let events, freshnessTimer;
 export function mount(el, { refresh }) {
   events = new AbortController();
-  el.addEventListener('click', e => {
-    const act = e.target.closest('button')?.dataset.act;
-    if (act === 'refresh') refresh();
+  freshnessTimer = setInterval(() => { const node = el.querySelector('[data-freshness]'); if (node) node.outerHTML = freshness(); }, 1000);
+  el.addEventListener('click', async e => {
+    const button = e.target.closest('button'), act = button?.dataset.act;
+    if (button?.dataset.svc) await performServiceAction(el, button.dataset.svc, button.dataset.u, 'system', refresh);
     if (act === 'live') {
       state.live = !state.live;
       if (state.snap) el.innerHTML = render(state.snap);
     }
   }, { signal: events.signal });
 }
-export function dispose() { events?.abort(); }
+export function dispose() { events?.abort(); clearInterval(freshnessTimer); }
 
 function temperatureCard(temps = []) {
+  const labels = temperatureLabels(temps);
   const hottest = temps.length ? Math.max(...temps.map(t => t.celsius)) : null;
   return `<article class="card temperatures">
     <div class="card-top"><h2>Temperatures</h2><span class="muted">hottest sensor</span></div>
     ${hottest === null ? '<p class="unavailable">Temperature sensors unavailable (install lm-sensors)</p>' : `
       <div class="temp-reading"><b class="temp-value">${+hottest.toFixed(1)} °C</b></div>
-      ${temps.map(t => {
-        const severity = t.crit != null && t.celsius >= t.crit ? 'hot' : t.high != null && t.celsius >= t.high - 5 ? 'warm' : 'blue';
+      ${temps.map((t, i) => {
         const ceiling = t.crit > 0 ? t.crit : t.high > 0 ? t.high : 100;
         const width = Math.max(0, Math.min(100, 100 * t.celsius / ceiling));
         const limits = [t.high != null ? 'high ' + t.high + ' °C' : '', t.crit != null ? 'critical ' + t.crit + ' °C' : ''].filter(Boolean).join(' · ');
-        return `<div class="meter" title="${esc(limits)}"><div><span>${esc(t.label)}</span><b>${+t.celsius.toFixed(1)} °C</b></div><div class="track" role="meter" aria-label="${esc(t.label)}" aria-valuemin="${Math.min(0, t.celsius)}" aria-valuemax="${Math.max(ceiling, t.celsius)}" aria-valuenow="${t.celsius}" aria-valuetext="${esc(t.celsius + ' °C' + (limits ? ' · ' + limits : ''))}"><i class="${severity}" style="width:${width}%"></i></div></div>`;
+        return `<div class="meter" title="${esc(limits)}"><div><span class="meter-label" title="${esc(t.label)}">${esc(labels[i])}</span><b>${+t.celsius.toFixed(1)} °C</b></div><div class="track" role="meter" aria-label="${esc(t.label)}" aria-valuemin="${Math.min(0, t.celsius)}" aria-valuemax="${Math.max(ceiling, t.celsius)}" aria-valuenow="${t.celsius}" aria-valuetext="${esc(t.celsius + ' °C' + (limits ? ' · ' + limits : ''))}"><i class="${meterClass(width)}" style="width:${width}%"></i></div></div>`;
       }).join('')}`}
   </article>`;
 }

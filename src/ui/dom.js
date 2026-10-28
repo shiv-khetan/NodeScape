@@ -26,8 +26,17 @@ export function uptime(sec) {
 export const svcClass = u => (u.active === 'failed' ? 'bad' : u.sub === 'running' ? 'ok' : '');
 export const tag = u => `<span class="tag status ${svcClass(u)}">${esc(u.sub)}</span>`;
 export const stat = (label, value, on) => `<div class="${on ? 'on' : ''}"><small>${label}</small><b>${value}</b></div>`;
+export const plural = (n, one, many = one + 's') => n + ' ' + (n === 1 ? one : many);
+export function elapsed(value) {
+  const match = String(value).match(/^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$/);
+  if (!match) return value;
+  const [, days, hours, minutes, seconds] = match;
+  return +days ? +days + 'd ' + (+hours || 0) + 'h' : +hours ? +hours + 'h ' + +minutes + 'm' : +minutes ? +minutes + 'm' : +seconds + 's';
+}
+
 export const agoLabel = s => (s >= 60 ? Math.round(s / 60) + 'm ago' : s + 's ago');
 
+// Page toolbars order search, filters, then actions; section tools stay in their panel header on pages with several tables.
 export function head(title, sub, controls = '', filters = '', actions = '') {
   return `<section class="hero page-head"><div><h1>${title}</h1>${sub ? `<p class="page-meta">${sub}</p>` : ''}</div><div class="header-actions">${actions}</div></section><div class="page-toolbar">${controls}${filters}</div>`;
 }
@@ -40,5 +49,6 @@ export function dateTime(value) {
 }
 
 // A filter group with one option is noise, so it renders nothing.
-export const segTabs = (attr, cur, opts) => opts.length < 2 ? '' : `<div class="segtabs" role="group">${opts.map(([v, label]) => `<button data-${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}" aria-pressed="${String(v) === String(cur)}">${label}</button>`).join('')}</div>`;
+const filterNames = {state:'Filter services by state',scope:'Service scope',logstate:'Filter journal by severity',lines:'Journal line count',schedule:'Filter schedules by type',protocol:'Filter ports by protocol','file-kind':'Filter files by type','account-filter':'Filter users by access'};
+export const segTabs = (attr, cur, opts, label = filterNames[attr] || 'Filter ' + attr) => opts.length < 2 ? '' : `<div class="segtabs" role="group" aria-label="${esc(label)}">${opts.map(([v, label]) => `<button data-${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}" aria-pressed="${String(v) === String(cur)}">${label}</button>`).join('')}</div>`;
 

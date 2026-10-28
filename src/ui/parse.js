@@ -125,3 +125,11 @@ export const parseLog = l => {
   return m ? { time: m[1].slice(11, 19), unit: m[2], msg: m[3] } : { time: '', unit: '', msg: l };
 };
 export const isErr = s => /error|fail|fatal|denied|panic|critical/i.test(s);
+
+export function temperatureLabels(temps) {
+  const short = label => label.split(' · ').at(-1).replace(/^Package id \d+$/, 'Package');
+  return temps.map(t => {
+    const label = short(t.label);
+    return temps.filter(other => short(other.label) === label).length > 1 ? t.label : label;
+  });
+}

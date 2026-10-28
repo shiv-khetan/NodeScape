@@ -1,9 +1,9 @@
 import { state, currentTarget, requestContext, isCurrent } from '../state.js';
 import { serviceAction } from '../backend.js';
-import { confirmAction } from '../ui/confirm.js';
+import { runAction } from '../ui/confirm.js';
 import { rowMenu } from '../ui/menu.js';
-import { withSudo } from '../ui/sudo.js';
-import { esc, head, stat, svcClass, tag, segTabs, toast, search } from '../ui/dom.js';
+import { showError } from '../ui/errors.js';
+import { esc, head, tag, segTabs, toast, search, plural } from '../ui/dom.js';
 
 let scope = 'system', scopeGeneration = 0, data, events, pending;
 const unitState = u => u.active === 'failed' ? 'failed' : u.sub === 'running' ? 'running' : 'inactive';
@@ -18,12 +18,13 @@ export function render(d) {
     const st = unitState(u);
     const visible = st === 'running' ? ['restart','stop'] : st === 'failed' ? ['restart'] : ['start'];
     const logs = scope === 'system' ? `<button data-unit="${esc(u.name)}">Logs</button>` : '';
-    const menu = ['start','stop','restart','enable','disable'].filter(a => !visible.includes(a)).map(a => actionButton(u,a)).join('') + (st === 'failed' ? '' : logs);
+    const valid = [...(st === 'running' ? ['restart','stop'] : st === 'failed' ? ['start','restart'] : ['start']), ...(u.enabled === 'enabled' || u.enabled === 'enabled-runtime' ? ['disable'] : u.enabled === 'disabled' ? ['enable'] : [])];
+    const menu = valid.filter(a => !visible.includes(a)).map(a => actionButton(u,a)).join('') + (st === 'failed' ? '' : logs);
     return `<tr data-q="${esc((u.name + ' ' + u.description).toLowerCase())}" data-st="${st}"><td><div class="who"><div><p>${esc(u.name)}</p><small title="${esc(u.description)}">${esc(u.description)}</small>${u.load !== 'loaded' ? `<small class="service-load">${esc(u.load)}</small>` : ''}</div></div></td><td>${tag(u)}</td><td><span data-enabled>${esc(u.enabled)}</span></td><td><div class="acts">${visible.map(a => actionButton(u,a)).join('')}${st === 'failed' ? logs : ''}${rowMenu(u.name,menu)}</div></td></tr>`;
   }).join('');
   const available = scope === 'system' || selected.available;
   const counts = segTabs('state', svcState, [['all', 'All '+units.length], ['running', 'Running '+n('running')], ['failed', 'Failed '+n('failed')], ['inactive', 'Inactive '+n('inactive')]]).replace('data-state="failed" class="','data-state="failed" class="'+(n('failed') ? 'has-errors ' : ''));
-  return head('Services', `${esc(state.host)} · systemd · ${units.length} units`, search('filter','Search services',svcFilter), counts, segTabs('scope',scope,[['system','System'],['user','User']])) + `<section class="grid services"><p class="services-context">${scope === 'system' ? 'System services · actions may require administrator permission.' : 'Services owned by this SSH account · no administrator permission needed.'}</p>${available ? `<article class="card full"><table><colgroup><col class="service-unit"><col class="service-state"><col class="service-enabled"><col class="service-actions"></colgroup><thead><tr><th scope="col">Unit</th><th scope="col">State</th><th scope="col">Enabled</th><th scope="col" class="service-actions-label">Actions</th></tr></thead><tbody>${rows}</tbody></table><p id="services-empty" class="services-context" hidden>No services match this filter.</p></article>` : `<p id="services-unavailable" role="status">${esc(selected.reason || 'User manager unavailable for this SSH account.')}</p>`}</section>`;
+  return head('Services', `${esc(state.host)} · systemd · ${plural(units.length, 'unit')}`, search('filter','Search services',svcFilter), counts + segTabs('scope',scope,[['system','System'],['user','User']])) + `<section class="grid services">${available ? `<article class="card full"><div class="card-top"><h2>Units</h2><span class="muted">${scope === 'system' ? 'System services · actions may require administrator permission.' : 'Services owned by this SSH account · no administrator permission needed.'}</span></div><table><colgroup><col class="service-unit"><col class="service-state"><col class="service-enabled"><col class="service-actions"></colgroup><thead><tr><th scope="col">Unit</th><th scope="col">State</th><th scope="col">Enabled</th><th scope="col" class="service-actions-label">Actions</th></tr></thead><tbody>${rows}</tbody></table><p id="services-empty" class="services-context" hidden>No services match this filter.</p></article>` : `<p id="services-unavailable" role="status">${esc(selected.reason || 'User manager unavailable for this SSH account.')}</p>`}</section>`;
 }
 
 function applyFilter(el) {
@@ -66,33 +67,40 @@ export function mount(el, { refresh }) {
       applyFilter(el);
     }
     if (!action || pending) return;
-    const target = currentTarget(), request = requestContext(), actionScope = scope, generation = scopeGeneration;
-    const current = () => isCurrent(request) && scopeGeneration === generation;
-    const verb = action[0].toUpperCase() + action.slice(1);
-    if (['stop', 'restart', 'disable'].includes(action) && !await confirmAction({ verb, object: unit, server: target.host, scope: actionScope, password: actionScope === 'system' ? 'maybe' : 'no', explanation: { stop: 'The service will stop until it is started again.', restart: 'The service will briefly stop while it restarts.', disable: 'The service will no longer start automatically.' }[action] })) return;
-    if (!current() || pending) return;
-    const token = {};
-    pending = token;
-    el.querySelectorAll('[data-svc]').forEach(b => { b.disabled = true; });
-    try {
-      const run = password => {
-        if (!current()) throw { kind: 'cancelled', message: 'Action cancelled' };
-        return serviceAction(target, unit, action, password, actionScope);
-      };
-      await (actionScope === 'system' ? withSudo(run, verb + ' ' + unit) : run());
-      if (!current()) return;
-      toast(`${{start:'Started',stop:'Stopped',restart:'Restarted',enable:'Enabled',disable:'Disabled'}[action]} ${unit} on ${target.host}`);
-      refresh();
-    } catch (err) {
-      if (!current() || err.kind === 'cancelled') return;
-      toast(err.message);
-      if (err.kind === 'outcome_unknown') refresh();
-    } finally {
-      if (pending === token) {
-        pending = null;
-        el.querySelectorAll('[data-svc]').forEach(b => { b.disabled = false; });
-      }
-    }
+    const generation = scopeGeneration;
+    await performServiceAction(el, action, unit, scope, refresh, () => scopeGeneration === generation);
+
   }, { signal: events.signal });
 }
 export function dispose() { events?.abort(); }
+
+export async function performServiceAction(el, action, unit, actionScope, refresh, scopeCurrent = () => true) {
+  if (pending) return;
+  const target = currentTarget(), request = requestContext();
+  const current = () => isCurrent(request) && scopeCurrent();
+  const verb = action[0].toUpperCase() + action.slice(1), token = {};
+  pending = token;
+  el.querySelectorAll('[data-svc]').forEach(b => { b.disabled = true; });
+  try {
+    const result = await runAction({ verb, object: unit,
+      server: state.profiles.find(p => p.id === state.profileId)?.name || target.host,
+      scope: actionScope, password: actionScope === 'system' ? 'Yes, if sudo asks for it' : 'No',
+      confirm: ['stop','restart','disable'].includes(action), allowSudo: actionScope === 'system',
+      destructive: ['stop','restart','disable'].includes(action),
+      explanation: {start:'The service will start now.',enable:'The service will start automatically at boot.',stop:'The service will stop until it is started again.',restart:'The service will briefly stop while it restarts.',disable:'The service will no longer start automatically.'}[action],
+      run: password => {
+        if (!current()) throw { kind: 'cancelled', message: 'Action cancelled' };
+        return serviceAction(target, unit, action, actionScope === 'system' ? password : undefined, actionScope);
+      },
+    });
+    if (!result || !current()) return;
+    toast(({start:'Started',stop:'Stopped',restart:'Restarted',enable:'Enabled',disable:'Disabled'}[action]) + ' ' + unit + ' on ' + target.host);
+    await refresh();
+  } catch (error) {
+    if (!current() || error.kind === 'cancelled') return;
+    if (error.kind === 'outcome_unknown') await refresh();
+    showError(error, el, target.host);
+  } finally {
+    if (pending === token) { pending = null; el.querySelectorAll('[data-svc]').forEach(b => { b.disabled = false; }); }
+  }
+}

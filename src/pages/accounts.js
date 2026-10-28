@@ -1,9 +1,9 @@
 import { accountsRead, accountAction } from '../backend.js';
-import { currentTarget, requestContext, isCurrent } from '../state.js';
-import { confirmAction } from '../ui/confirm.js';
+import { state, currentTarget, requestContext, isCurrent } from '../state.js';
+import { runAction } from '../ui/confirm.js';
 import { rowMenu } from '../ui/menu.js';
-import { esc, head, stat, toast, search, segTabs } from '../ui/dom.js';
-import { withSudo } from '../ui/sudo.js';
+import { esc, head, stat, toast, search, segTabs, plural } from '../ui/dom.js';
+import { showError } from '../ui/errors.js';
 
 export const load = target => accountsRead(target);
 let data, filter = '', showSystem = false, accountFilter = 'all', events, dialog;
@@ -23,10 +23,9 @@ export function render(value) {
       + '<td><div class="acts"><button data-account-action="add_to_group">Add group</button>'
       + rowMenu(user.name, '<button class="destructive" data-account-action="remove_from_group"' + (protectedAccount ? ' disabled' : '') + '>Remove group</button><button class="destructive" data-account-action="delete_user"' + (protectedAccount ? ' disabled' : '') + '>Delete</button>' + (protectedAccount ? '<p class="accounts-protected">Protected: ' + (user.name === data.currentUser ? 'current SSH user' : 'system account') + '</p>' : '')) + '</div></td></tr>';
   }).join('');
-  return '<div class="accounts-page">' + head('Users', esc(currentTarget().host)+' · '+data.users.length+' users · '+data.groups.length+' groups', search('accounts-filter','Filter users',filter) + segTabs('account-filter',accountFilter,[['all','All '+data.users.length],['login','Login users '+data.users.filter(u=>u.login).length],['sudo','Sudo users '+data.users.filter(sudo).length]]) + '<button class="pill primary" id="add-account">Add user</button>')
+  return '<div class="accounts-page">' + head('Users', esc(currentTarget().host)+' · '+plural(data.users.length,'user')+' · '+plural(data.groups.length,'group'), search('accounts-filter','Filter users',filter) + segTabs('account-filter',accountFilter,[['all','All '+data.users.length],['login','Login users '+data.users.filter(u=>u.login).length],['sudo','Sudo users '+data.users.filter(sudo).length]]), '', '<button class="pill primary" id="add-account">Add user</button>')
     + '<section class="grid">'
-    + '<p class="accounts-note">Only group-based sudo is shown. Rules in sudoers are not read.</p><p id="accounts-current">SSH user: ' + esc(data.currentUser) + '</p>'
-    + '<article class="card full"><div class="card-top"><h2>Users</h2><label class="accounts-check"><input id="accounts-system" type="checkbox"' + (showSystem ? ' checked' : '') + '> Show system accounts</label></div>'
+    + '<article class="card full"><div class="card-top"><div><h2>Users</h2><span class="accounts-note">Only group-based sudo is shown. Rules in sudoers are not read.</span><p id="accounts-current">SSH user: ' + esc(data.currentUser) + '</p></div><label class="accounts-check"><input id="accounts-system" type="checkbox"' + (showSystem ? ' checked' : '') + '> Show system accounts</label></div>'
     + '<table id="accounts-users" aria-label="Users"><thead><tr><th scope="col">Name / home / shell</th><th scope="col">UID</th><th scope="col">Groups</th><th scope="col">Access</th><th scope="col">Actions</th></tr></thead><tbody>' + rows + '</tbody></table><p id="accounts-empty" hidden>No users match this filter.</p></article>'
     + '<article class="card full"><div class="card-top"><h2>Groups</h2></div><table id="accounts-groups" aria-label="Groups"><thead><tr><th scope="col">Name</th><th scope="col">GID</th><th scope="col">Members (primary and supplementary)</th></tr></thead><tbody>'
     + data.groups.map(g => '<tr><td>' + esc(g.name) + '</td><td class="num">' + esc(g.gid) + '</td><td><div class="accounts-tags">' + tags([...new Set([...g.members, ...data.users.filter(u => u.gid === g.gid).map(u => u.name)])]) + '</div></td></tr>').join('')
@@ -41,6 +40,9 @@ function applyFilter(el) {
     if (!row.hidden) visible++;
   });
   el.querySelector('#accounts-empty').hidden = visible > 0;
+  const base = data.users.filter(user => (showSystem || !user.system) && [user.name,user.uid,...user.groups].join(' ').toLowerCase().includes(filter.toLowerCase()));
+  for (const [key,label,users] of [['all','All',base],['login','Login users',base.filter(u=>u.login)],['sudo','Sudo users',base.filter(u=>u.groups.some(g=>data.sudoGroups.includes(g)))]]) el.querySelector('[data-account-filter="'+key+'"]').textContent = label+' '+users.length;
+  el.querySelector('.page-meta').textContent = currentTarget().host+' · '+plural(visible,'user')+' · '+plural(data.groups.length,'group');
 }
 
 function closeDialog() { dialog?.close(); dialog?.remove(); dialog = null; }
@@ -69,7 +71,7 @@ export function mount(el, { refresh }) {
   el.addEventListener('change', event => {
     if (event.target.id === 'accounts-system') { showSystem = event.target.checked; applyFilter(el); }
   }, { signal: events.signal });
-  async function perform(action, args) {
+  async function perform(action, args, confirmation = {}) {
     if (busy || !isCurrent(pageRequest)) return;
     busy = true;
     const target = currentTarget(), request = requestContext();
@@ -77,17 +79,19 @@ export function mount(el, { refresh }) {
     const buttons = [...el.querySelectorAll('#add-account, [data-account-action]')].filter(b => !b.disabled);
     buttons.forEach(b => { b.disabled = true; });
     try {
-      await withSudo(password => {
-        if (!isCurrent(request)) throw { kind: 'cancelled', message: 'Action cancelled' };
-        return accountAction(target, action, args, password);
-      }, {create_user:'Create user',delete_user:'Delete '+args.name,add_to_group:'Add group',remove_from_group:'Remove group'}[action]);
+      const result = await runAction({ verb:{create_user:'Create user',delete_user:'Delete '+args.name,add_to_group:'Add group',remove_from_group:'Remove group'}[action],
+        object:'', server:state.profiles.find(p=>p.id===state.profileId)?.name || target.host, scope:'User account', confirm:false, ...confirmation,
+        run: (password, checks = {}) => {
+          if (!isCurrent(request)) throw { kind:'cancelled', message:'Action cancelled' };
+          return accountAction(target, action, action === 'delete_user' ? {...args,removeHome:checks['account-remove-home'] === true} : args, password);
+        },
+      });
+      if (!result) return;
       if (isCurrent(request)) { toast('Account action completed'); await refresh(); }
     } catch (error) {
       if (!isCurrent(request) || error.kind === 'cancelled') return;
-      if (error.kind === 'outcome_unknown') {
-        toast('Outcome unknown. Refreshing accounts. ' + error.message);
-        await refresh();
-      } else toast(error.message);
+      if (error.kind === 'outcome_unknown') await refresh();
+      showError(error, el, target.host);
     } finally {
       busy = false;
       if (isCurrent(request)) buttons.forEach(b => { b.disabled = false; });
@@ -120,9 +124,7 @@ export function mount(el, { refresh }) {
     const name = button.closest('tr').dataset.name;
     const user = data.users.find(u => u.name === name);
     if (action === 'delete_user') {
-      const target = currentTarget(), request = requestContext();
-      const result = await confirmAction({verb:'Delete',object:name,server:target.host,scope:'User account',password:'maybe',explanation:'Keep the home directory unless you explicitly choose to delete it too.',checks:[{id:'account-confirm',label:'I confirm deleting this user',required:true},{id:'account-remove-home',label:'Also delete the home directory'}]});
-      if (result && isCurrent(request)) perform(action, { name, removeHome: result['account-remove-home'] });
+      perform(action, {name}, {verb:'Delete',object:name,confirm:true,explanation:'Keep the home directory unless you explicitly choose to delete it too.',checks:[{id:'account-confirm',label:'I confirm deleting this user',required:true},{id:'account-remove-home',label:'Also delete the home directory'}]});
       return;
     }
     const adding = action === 'add_to_group';

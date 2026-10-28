@@ -46,6 +46,22 @@ test('network port search and filters live with the ports table', async ({ page 
 test('files toolbar groups create and upload actions; no root-only breadcrumb', async ({ page }) => {
   await nav(page, 'Files');
   const toolbar = page.locator('.page-toolbar');
-  for (const action of ['mkdir', 'create', 'upload']) await expect(toolbar.locator(`[data-file-action="${action}"]`)).toBeVisible();
+  for (const action of ['mkdir', 'create']) await expect(toolbar.locator(`[data-file-action="${action}"]`)).toBeVisible();
+  await expect(page.locator('.header-actions [data-file-action="upload"]')).toBeVisible();
   await expect(page.locator('#files-crumbs')).toBeHidden();
+});
+
+test('non-destructive actions that need a password get a primary button, not a red one', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const { installBackend, APP } = require('./helpers');
+  await installBackend(page, { responses: { service_action: [{ error: { kind: 'sudo_required', message: 'sudo: a password is required' } }, 'ok'] } });
+  await page.goto(APP);
+  await nav(page, 'Services');
+  await page.locator('[data-svc="start"]:visible').first().click();
+  const dialog = page.locator('.confirm-dialog');
+  const submit = dialog.locator('button[type="submit"]');
+  await expect(submit).toHaveClass(/primary/);
+  await expect(submit).not.toHaveClass(/danger/);
+  await expect(dialog).toContainText('The service will start now.');
+  await page.close();
 });

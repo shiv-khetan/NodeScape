@@ -23,7 +23,7 @@ export function load(target) {
 }
 
 export function render() {
-  return head('Files', esc(currentTarget().host)+' · SFTP', search('files-filter','Search files') + segTabs('file-kind','all',[['all','All'],['file','Files'],['dir','Folders']]) + '<div class="toolbar-actions"><button class="pill" data-file-action="mkdir">New folder</button><button class="pill" data-file-action="create">New file</button><button class="pill primary" data-file-action="upload">Upload</button></div>', '', '<button class="round" data-file-action="refresh" aria-label="Refresh files" title="Refresh files">'+ICON.refresh+'</button>') + '<section class="files grid">' +
+  return head('Files', esc(currentTarget().host)+' · SFTP', search('files-filter','Search files') + segTabs('file-kind','all',[['all','All'],['file','Files'],['dir','Folders']]) + '<div class="toolbar-actions"><button class="pill" data-file-action="mkdir">New folder</button><button class="pill" data-file-action="create">New file</button></div>', '', '<button class="pill primary" data-file-action="upload">Upload</button>') + '<section class="files grid">' +
     '<article class="card full files-browser">' +
       '<form id="files-location" class="files-location"><label for="files-path">Remote path</label>' +
       '<input class="field mono" id="files-path" spellcheck="false" autocomplete="off" value="' + esc(view.path) + '">' +
@@ -124,7 +124,7 @@ export function mount(el) {
       const name = direction === 'up' ? local.split(/[\\/]/).pop() : entry.name;
       const remote = join(directory, name);
       const overwrite = direction === 'down' || model.entries.some(e => e.name === name);
-      if (direction === 'up' && overwrite && !await confirmAction({verb:'Replace',object:name,server:model.target.host,scope:remote,password:'no',explanation:'The existing file will be overwritten.'})) return;
+      if (direction === 'up' && overwrite && !await confirmAction({verb:'Replace',object:name,server:model.target.host,scope:remote,password:'No',explanation:'The existing file will be overwritten.'})) return;
       if (!valid()) return;
       const item = { id: crypto.randomUUID(), name, bytes: 0, total: null, status: direction === 'up' ? 'Uploading' : 'Downloading' };
       model.transfers.push(item); model.drawTransfers();
@@ -141,7 +141,7 @@ export function mount(el) {
     } catch (err) { error(err); }
   }
   async function remove(candidate, recursive) {
-    const confirmation = await confirmAction({verb:'Delete',object:candidate.name,server:model.target.host,scope:candidate.path,password:'no',explanation:'This permanently deletes the selected '+(recursive ? 'folder and all its contents.' : 'file or empty folder.'),checks:candidate.kind === 'dir' ? [{id:'files-confirm-recursive',label:'I confirm deleting this folder and all its contents recursively',required:recursive}] : []});
+    const confirmation = await confirmAction({verb:'Delete',object:candidate.name,server:model.target.host,scope:candidate.path,password:'No',explanation:'This permanently deletes the selected '+(recursive ? 'folder and all its contents.' : 'file or empty folder.'),checks:candidate.kind === 'dir' ? [{id:'files-confirm-recursive',label:'I confirm deleting this folder and all its contents recursively',required:recursive}] : []});
     if (!confirmation || !valid()) return;
     const removeContents = recursive || confirmation['files-confirm-recursive'] === true;
     try {
