@@ -1,6 +1,6 @@
 // Real-server code paths, driven by a fake Tauri backend that returns fixture output.
 const { test, expect } = require('@playwright/test');
-const { openServer, nav } = require('./helpers');
+const { openServer, nav, clickService } = require('./helpers');
 const F = require('./fixtures');
 
 const calls = page => page.evaluate(() => window.__calls);
@@ -73,7 +73,7 @@ test('logs unit filter is sent to the backend', async ({ page }) => {
   await nav(page, 'Logs');
   await page.locator('#logunit').fill('nginx');
   await page.locator('#logunit').press('Enter');
-  await expect(page.locator('.hostchip')).toHaveText('nginx');
+  await expect(page.locator('.page-meta')).toContainText('nginx');
   const last = (await calls(page)).filter(c => c.cmd === 'logs').at(-1);
   expect(last.args).toMatchObject({ host: 'testbox', unit: 'nginx', lines: 300 });
 });
@@ -128,13 +128,11 @@ test('settings: cancel leaves the config unchanged', async ({ page }) => {
 test('stopping a service asks first and sends the exact unit', async ({ page }) => {
   await openServer(page, { snapshot: F.SNAPSHOT, service_action: 'ok' });
   await nav(page, 'Services');
-  page.once('dialog', d => d.dismiss());
-  await page.locator('[data-svc="stop"][data-u="nginx.service"]').click();
+  await clickService(page,'stop','nginx.service','cancel');
   expect((await calls(page)).some(c => c.cmd === 'service_action')).toBe(false);
 
-  page.once('dialog', d => d.accept());
-  await page.locator('[data-svc="stop"][data-u="nginx.service"]').click();
-  await expect(page.locator('#toast')).toHaveText('stop nginx.service: ok');
+  await clickService(page,'stop','nginx.service');
+  await expect(page.locator('#toast')).toHaveText('Stopped nginx.service on testbox');
   const act = (await calls(page)).find(c => c.cmd === 'service_action');
   expect(act.args).toMatchObject({ target: { host: 'testbox', config: null }, scope: 'system', unit: 'nginx.service', action: 'stop' });
 });
@@ -142,7 +140,7 @@ test('stopping a service asks first and sends the exact unit', async ({ page }) 
 test('sudo_required opens the one-action password dialog', async ({ page }) => {
   await openServer(page, { snapshot: F.SNAPSHOT, service_action: { error: { kind: 'sudo_required', message: 'Elevation is required.' } } });
   await nav(page, 'Services');
-  await page.locator('[data-svc="start"][data-u="backup.service"]').click();
+  await clickService(page,'start','backup.service');
   const dialog = page.getByRole('dialog', { name: 'Administrator permission' });
   await expect(dialog).toContainText('used once');
   await dialog.getByRole('button', { name: 'Cancel' }).click();

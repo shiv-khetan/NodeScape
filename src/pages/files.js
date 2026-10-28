@@ -1,6 +1,8 @@
 import * as backend from '../backend.js';
 import { currentTarget, requestContext, isCurrent } from '../state.js';
-import { esc, head } from '../ui/dom.js';
+import { confirmAction } from '../ui/confirm.js';
+import { rowMenu } from '../ui/menu.js';
+import { esc, head, dateTime, search, segTabs, ICON } from '../ui/dom.js';
 
 const icons = {
   dir: '<svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3"/></svg>',
@@ -9,7 +11,7 @@ const icons = {
   other: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5M12 16h.01"/></svg>',
 };
 const size = n => n == null ? 'Unavailable' : n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KiB' : (n / 1024 ** 2).toFixed(1) + ' MiB';
-const modified = n => n == null ? 'Unavailable' : new Date(n * 1000).toLocaleString();
+const modified = n => n == null ? 'Unavailable' : dateTime(n * 1000);
 const join = (path, name) => path.replace(/\/+$/, '') + '/' + name;
 let view, events;
 
@@ -21,14 +23,12 @@ export function load(target) {
 }
 
 export function render() {
-  return head('Files', esc(currentTarget().host)) + '<section class="files grid">' +
+  return head('Files', esc(currentTarget().host)+' · SFTP', search('files-filter','Search files') + segTabs('file-kind','all',[['all','All'],['file','Files'],['dir','Folders']]) + '<div class="toolbar-actions"><button class="pill" data-file-action="mkdir">New folder</button><button class="pill" data-file-action="create">New file</button><button class="pill primary" data-file-action="upload">Upload</button></div>', '', '<button class="round" data-file-action="refresh" aria-label="Refresh files" title="Refresh files">'+ICON.refresh+'</button>') + '<section class="files grid">' +
     '<article class="card full files-browser">' +
       '<form id="files-location" class="files-location"><label for="files-path">Remote path</label>' +
       '<input class="field mono" id="files-path" spellcheck="false" autocomplete="off" value="' + esc(view.path) + '">' +
       '<button class="pill" type="submit">Go</button></form>' +
       '<nav id="files-crumbs" class="files-crumbs" aria-label="Directory breadcrumbs"></nav>' +
-      '<div class="files-tools"><button class="pill" data-file-action="mkdir">New folder</button><button class="pill" data-file-action="create">New file</button>' +
-      '<button class="pill primary" data-file-action="upload">Upload</button><button class="pill" data-file-action="refresh">Refresh files</button></div>' +
       '<p id="files-error" class="error" role="alert" hidden></p><button class="pill" id="files-recursive" hidden>Delete recursively</button>' +
       '<div class="files-table-head"><span>Name</span><span>Size</span><span>Modified</span><span></span></div>' +
       '<div id="files-entries" aria-live="polite"><p>Loading directory…</p></div></article>' +
@@ -44,7 +44,7 @@ export function mount(el) {
   const signal = events.signal, model = view, context = requestContext();
   const valid = () => !signal.aborted && isCurrent(context);
   const $ = selector => el.querySelector(selector);
-  let listSequence = 0, editorSequence = 0, nameAction, recursiveCandidate;
+  let listSequence = 0, editorSequence = 0, nameAction, recursiveCandidate, fileKind = 'all';
   const error = err => {
     if (!valid()) return;
     $('#files-error').textContent = err?.message || String(err);
@@ -52,25 +52,31 @@ export function mount(el) {
   };
   function drawCrumbs() {
     const parts = model.path.split('/').filter(Boolean);
+    // At the root the path field already says "/", so the breadcrumb would only repeat it.
+    $('#files-crumbs').hidden = !parts.length;
     $('#files-crumbs').innerHTML = '<button class="pill" data-path="/" aria-label="Root directory">/</button>' +
       parts.map((part, i) => '<span aria-hidden="true">/</span><button class="pill" data-path="' + esc('/' + parts.slice(0, i + 1).join('/')) + '">' + esc(part) + '</button>').join('');
   }
   function drawEntries() {
     $('#files-entries').innerHTML = model.entries.length ? model.entries.map((entry, index) => {
-      const action = (name, title = name) => '<button data-file-action="' + name.toLowerCase() + '" data-index="' + index + '" aria-label="' + title + '">' + name + '</button>';
-      return '<div class="files-row"><div class="who"><span class="ic file-icon" aria-label="' + esc(entry.kind) + '">' + (icons[entry.kind] || icons.other) + '</span><div class="file-label"><p class="file-name">' + esc(entry.name) + '</p>' +
+      const action = (name, title = name) => '<button class="' + (name === 'Delete' ? 'destructive' : '') + '" data-file-action="' + name.toLowerCase() + '" data-index="' + index + '" aria-label="' + title + '">' + name + '</button>';
+      return '<div class="files-row" data-kind="' + esc(entry.kind) + '"><div class="who"><span class="ic file-icon" aria-label="' + esc(entry.kind) + '">' + (icons[entry.kind] || icons.other) + '</span><div class="file-label" title="' + esc(entry.name + (entry.linkTarget ? ' → ' + entry.linkTarget : '')) + '"><p class="file-name">' + esc(entry.name) + '</p>' +
         (entry.kind === 'symlink' ? '<small>Symlink' + (entry.linkTarget != null ? ' → ' + esc(entry.linkTarget) : '') + '</small>' : '') +
-        '</div></div><span class="file-size">' + size(entry.size) + '</span><time class="file-modified">' + esc(modified(entry.mtime)) + '</time><div class="acts file-actions">' +
+        '</div></div><span class="file-size">' + (entry.kind === 'dir' ? '—' : size(entry.size)) + '</span><time class="file-modified">' + esc(modified(entry.mtime)) + '</time><div class="acts file-actions">' +
         (entry.kind === 'dir' ? action('Open', 'Open folder') : entry.kind === 'file' ? action('Edit') + action('Download') : '') +
-        action('Rename') + action('Delete') + '</div></div>';
+        rowMenu(entry.name, action('Rename') + action('Delete')) + '</div></div>';
     }).join('') : '<p class="files-empty">This directory is empty. Create a file or upload one to get started.</p>';
+  }
+  function filterEntries() {
+    const q = $('#files-filter').value.toLowerCase();
+    el.querySelectorAll('.files-row').forEach(row => { row.hidden = !row.querySelector('.file-name').textContent.toLowerCase().includes(q) || fileKind !== 'all' && row.dataset.kind !== fileKind; });
   }
   async function list(path = model.path) {
     if (!valid()) return;
     const sequence = ++listSequence;
     $('#files-error').hidden = true; $('#files-recursive').hidden = true; recursiveCandidate = null;
     $('#files-entries').setAttribute('aria-busy', 'true');
-    el.querySelectorAll('.files-tools button:not([data-file-action="refresh"])').forEach(button => { button.disabled = !model.path; });
+    el.querySelectorAll('[data-file-action="mkdir"], [data-file-action="create"], [data-file-action="upload"]').forEach(button => { button.disabled = !model.path; });
     try {
       if (!path) path = await backend.filesHome(model.target);
       if (!valid() || sequence !== listSequence) return;
@@ -80,12 +86,14 @@ export function mount(el) {
       model.path = path.replace(/\/+$/, '') || '/'; model.entries = entries;
       $('#files-path').value = model.path;
       drawCrumbs(); drawEntries();
+      el.querySelectorAll('[data-file-kind]').forEach(b => { const kind = b.dataset.fileKind; b.textContent = ({all:'All',file:'Files',dir:'Folders'}[kind])+' '+model.entries.filter(e=>kind==='all'||e.kind===kind).length; });
+      filterEntries();
     } catch (err) {
       if (valid() && sequence === listSequence) error(err);
     } finally {
       if (valid() && sequence === listSequence) {
         $('#files-entries').removeAttribute('aria-busy');
-        el.querySelectorAll('.files-tools button:not([data-file-action="refresh"])').forEach(button => { button.disabled = !model.path; });
+        el.querySelectorAll('[data-file-action="mkdir"], [data-file-action="create"], [data-file-action="upload"]').forEach(button => { button.disabled = !model.path; });
       }
     }
   }
@@ -116,7 +124,8 @@ export function mount(el) {
       const name = direction === 'up' ? local.split(/[\\/]/).pop() : entry.name;
       const remote = join(directory, name);
       const overwrite = direction === 'down' || model.entries.some(e => e.name === name);
-      if (direction === 'up' && overwrite && !confirm('Replace ' + name + ' on ' + model.target.host + '?')) return;
+      if (direction === 'up' && overwrite && !await confirmAction({verb:'Replace',object:name,server:model.target.host,scope:remote,password:'no',explanation:'The existing file will be overwritten.'})) return;
+      if (!valid()) return;
       const item = { id: crypto.randomUUID(), name, bytes: 0, total: null, status: direction === 'up' ? 'Uploading' : 'Downloading' };
       model.transfers.push(item); model.drawTransfers();
       try {
@@ -132,13 +141,15 @@ export function mount(el) {
     } catch (err) { error(err); }
   }
   async function remove(candidate, recursive) {
-    if (!confirm(recursive ? 'Delete ' + candidate.name + ' and ALL its contents recursively? This cannot be undone.' : 'Delete ' + candidate.name + '?')) return;
+    const confirmation = await confirmAction({verb:'Delete',object:candidate.name,server:model.target.host,scope:candidate.path,password:'no',explanation:'This permanently deletes the selected '+(recursive ? 'folder and all its contents.' : 'file or empty folder.'),checks:candidate.kind === 'dir' ? [{id:'files-confirm-recursive',label:'I confirm deleting this folder and all its contents recursively',required:recursive}] : []});
+    if (!confirmation || !valid()) return;
+    const removeContents = recursive || confirmation['files-confirm-recursive'] === true;
     try {
-      await backend.fileDelete(model.target, candidate.path, recursive);
+      await backend.fileDelete(model.target, candidate.path, removeContents);
       if (valid()) await list();
     } catch (err) {
       error(err);
-      if (valid() && candidate.kind === 'dir' && !recursive && err.kind === 'remote') {
+      if (valid() && candidate.kind === 'dir' && !removeContents && err.kind === 'remote') {
         recursiveCandidate = candidate; $('#files-recursive').hidden = false;
       }
     }
@@ -162,11 +173,17 @@ export function mount(el) {
     } catch (err) { error(err); }
   }, { signal });
   el.addEventListener('input', event => {
+    if (event.target.id === 'files-filter') filterEntries();
     if (event.target.id === 'files-text' && model.editor) model.editor.text = event.target.value;
   }, { signal });
   el.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button) return;
+    if (button.dataset.fileKind) {
+      fileKind = button.dataset.fileKind;
+      el.querySelectorAll('[data-file-kind]').forEach(b => { b.classList.toggle('on',b === button); b.setAttribute('aria-pressed',String(b === button)); });
+      filterEntries();return;
+    }
     if (button.dataset.path) { await list(button.dataset.path); return; }
     if (button.id === 'files-recursive' && recursiveCandidate) { await remove(recursiveCandidate, true); return; }
     if (button.dataset.cancelTransfer) {

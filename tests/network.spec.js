@@ -17,28 +17,31 @@ test('all cards, IPv6 and multiple default routes', async ({page})=>{
   await expect(page.locator('#network-routes')).toContainText('fe80::1');
   await expect(page.locator('#network-firewall')).toContainText('Permission needed to read rules');
   await expect(page.locator('#network-tailscale')).toContainText('peerbox');
+  await expect(page.locator('#network-firewall tr',{hasText:'nftables'}).locator('.state')).toHaveClass('state active');
+  await expect(page.locator('#network-tailscale tr',{hasText:'sleepbox'}).locator('.state')).toHaveClass('state inactive');
   await expect(page.locator('#network-tailscale')).toContainText('2026-10-01');
-  await expect(page.locator('.stats')).toContainText('Interfaces up1');
-  await expect(page.locator('.stats')).toContainText('Tailscale peers online1');
+  await expect(page.locator('.page-meta')).toContainText('1 interface up');
+  await expect(page.locator('.page-meta')).toContainText('1 Tailscale peer online');
   const calls=await page.evaluate(()=>window.__calls.filter(c=>c.cmd==='network_read'));
   expect(calls[0].args.target).toEqual({host:'testbox',config:null});
 });
 test('port search and TCP UDP tabs combine',async({page})=>{
   await open(page);
-  await page.getByRole('button',{name:'TCP',exact:true}).click();
+  await page.locator('button[data-protocol="tcp"]').click();
   await expect(page.locator('#network-ports tbody tr:visible')).toHaveCount(1);
   await page.getByRole('searchbox',{name:'Search listening ports'}).fill('53');
   await expect(page.locator('#network-ports tbody tr:visible')).toHaveCount(0);
-  await page.getByRole('button',{name:'UDP',exact:true}).click();
+  await page.locator('button[data-protocol="udp"]').click();
   await expect(page.locator('#network-ports tbody tr:visible')).toHaveCount(1);
   await page.getByRole('searchbox',{name:'Search listening ports'}).fill('SSHD');
-  await page.getByRole('button',{name:'All',exact:true}).click();
+  await page.locator('button[data-protocol="all"]').click();
   await expect(page.locator('#network-ports tbody tr:visible')).toHaveCount(1);
 });
 test('absent tools are unavailable instead of zero',async({page})=>{
   await open(page,{interfaces:null,routes4:null,routes6:null,ports:null,firewall:{},tailscale:null});
   for(const id of ['interfaces','routes','ports','firewall','tailscale']) await expect(page.locator('#network-'+id)).toContainText('Unavailable');
-  await expect(page.locator('.stats')).not.toContainText('online0');
+  await expect(page.locator('.page-meta')).not.toContainText('0 Tailscale peers online');
+  await expect(page.locator('.page-meta')).toContainText('Tailscale unavailable');
 });
 test('malformed JSON and wrong shapes do not break cards',async({page})=>{
   await open(page,{...data,interfaces:'{broken',routes4:'{}',routes6:'bad',ports:{},tailscale:'{bad'});

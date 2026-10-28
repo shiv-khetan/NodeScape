@@ -1,4 +1,5 @@
-function askPassword(wrong) {
+import { esc } from './dom.js';
+function askPassword(wrong, label) {
   return new Promise((resolve, reject) => {
     const dialog = document.createElement('dialog');
     dialog.className = 'sudo-dialog';
@@ -10,7 +11,7 @@ function askPassword(wrong) {
       + '<label for="sudo-password">Sudo password</label>'
       + '<input id="sudo-password" class="field" type="password" autocomplete="off" spellcheck="false" autofocus aria-describedby="sudo-description sudo-error">'
       + '<p id="sudo-error" class="sudo-error" role="alert"></p>'
-      + '<div class="dlg-actions"><button type="button" class="pill">Cancel</button><button type="submit" class="pill primary">Run action</button></div></form>';
+      + '<div class="dlg-actions"><button type="button" class="pill">Cancel</button><button type="submit" class="pill primary">' + esc(label) + '</button></div></form>';
     const form = dialog.querySelector('form'), field = dialog.querySelector('input');
     const cancel = dialog.querySelector('button[type="button"]');
     if (wrong) {
@@ -42,7 +43,7 @@ function askPassword(wrong) {
   });
 }
 
-export async function withSudo(run) {
+export async function withSudo(run, label = 'Run action') {
   try {
     return await run(null);
   } catch (error) {
@@ -50,7 +51,7 @@ export async function withSudo(run) {
   }
   let wrong = false;
   for (;;) {
-    let password = await askPassword(wrong);
+    let password = await askPassword(wrong, label);
     try {
       const pending = run(password);
       password = null;

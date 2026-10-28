@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openServer, nav } = require('./helpers');
+const { openServer, nav, clickService } = require('./helpers');
 const F = require('./fixtures');
 
 const unit = (name, active = 'active', sub = 'running', enabled = 'enabled', description = 'Example service') => ({ name, load: 'loaded', active, sub, enabled, description });
@@ -69,15 +69,13 @@ for (const scope of ['system', 'user']) {
     await page.locator('[data-scope="' + scope + '"]').click();
     const name = scope === 'user' ? 'sync.service' : 'web.service';
     for (const action of ['stop', 'restart', 'disable']) {
-      page.once('dialog', d => { expect(d.message()).toContain(name); return d.dismiss(); });
-      await row(page, name).locator('[data-svc="' + action + '"]').click();
+      await clickService(page, action, name, 'cancel');
     }
     expect(await calls(page, 'service_action')).toHaveLength(0);
     for (const action of ['start', 'stop', 'restart', 'enable', 'disable']) {
-      if (['stop', 'restart', 'disable'].includes(action)) page.once('dialog', d => d.accept());
-      await row(page, name).locator('[data-svc="' + action + '"]').click();
+      await clickService(page, action, name);
       await expect.poll(async () => (await calls(page, 'service_action')).length).toBe(['start', 'stop', 'restart', 'enable', 'disable'].indexOf(action) + 1);
-      await expect(page.locator('#toast')).toHaveText(action + ' ' + name + ': ok');
+      await expect(page.locator('#toast')).toHaveText(({start:'Started',stop:'Stopped',restart:'Restarted',enable:'Enabled',disable:'Disabled'}[action]) + ' ' + name + ' on testbox');
       await expect.poll(async () => (await calls(page, 'services_read')).length).toBe(['start', 'stop', 'restart', 'enable', 'disable'].indexOf(action) + 2);
     }
     for (const call of await calls(page, 'service_action')) {
@@ -91,10 +89,9 @@ test('enable and disable refresh the enabled column in the deterministic fixture
   await openServer(page, null);
   await nav(page, 'Services');
   const service = row(page, 'backup.service');
-  await service.locator('[data-svc="enable"]').click();
+  await clickService(page,'enable','backup.service');
   await expect(service.locator('[data-enabled]')).toHaveText('enabled');
-  page.once('dialog', d => d.accept());
-  await service.locator('[data-svc="disable"]').click();
+  await clickService(page,'disable','backup.service');
   await expect(service.locator('[data-enabled]')).toHaveText('disabled');
 });
 
@@ -114,11 +111,11 @@ test('only system actions use the sudo dialog; user errors never prompt or retry
     { error: { kind: 'sudo_required', message: 'Permission required' } }, 'ok',
     { error: { kind: 'sudo_required', message: 'Unexpected user permission failure' } },
   ] });
-  await row(page, 'web.service').locator('[data-svc="start"]').click();
+  await clickService(page,'start','web.service');
   const dialog = page.getByRole('dialog', { name: 'Administrator permission' });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Run action' }).click();
-  await expect(page.locator('#toast')).toContainText(': ok');
+  await dialog.getByRole('button', { name: 'Start web.service' }).click();
+  await expect(page.locator('#toast')).toContainText('Started web.service on testbox');
   await page.locator('[data-scope="user"]').click();
   await row(page, 'sync.service').locator('[data-svc="start"]').click();
   await expect(page.locator('#toast')).toHaveText('Unexpected user permission failure');
@@ -130,7 +127,7 @@ for (const scope of ['system', 'user']) {
   test(scope + ' outcome_unknown refreshes state and never retries the mutation', async ({ page }) => {
     await open(page, { service_action: { error: { kind: 'outcome_unknown', message: 'Outcome unknown. Refreshing state.' } } });
     await page.locator('[data-scope="' + scope + '"]').click();
-    await page.locator('[data-svc="start"]').first().click();
+    await clickService(page,'start');
     await expect(page.locator('#toast')).toContainText('Outcome unknown');
     await expect.poll(async () => (await calls(page, 'services_read')).length).toBe(2);
     expect(await calls(page, 'service_action')).toHaveLength(1);
@@ -140,7 +137,7 @@ for (const scope of ['system', 'user']) {
 
 test('late mutation results do not refresh a different scope', async ({ page }) => {
   await open(page, { service_action: { defer: true, value: { error: { kind: 'outcome_unknown', message: 'Lost' } } } });
-  await row(page, 'web.service').locator('[data-svc="start"]').click();
+  await clickService(page,'start','web.service');
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
   await page.locator('[data-scope="user"]').click();
   await page.evaluate(() => window.__pending.shift()());
@@ -162,6 +159,8 @@ for (const [width, height] of [[800, 600], [1024, 768], [1280, 800], [1440, 900]
         const selectors = ['header', '.hero', '.card'];
         return document.documentElement.scrollWidth <= innerWidth + 1 && [...document.querySelectorAll(selectors.join(','))].every(e => e.scrollWidth <= e.clientWidth + 1);
       })).toBe(true);
+      const more = page.getByRole('button',{name:/More actions/}).first();
+      await more.click();
       const action = page.locator('[data-svc="disable"]').first();
       await expect(action).toBeVisible();
       expect((await action.boundingBox()).width).toBeGreaterThan(30);

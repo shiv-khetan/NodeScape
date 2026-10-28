@@ -1,17 +1,1 @@
-/* Keep the existing card and toolbar vocabulary; dedicate the rest to the PTY. */
-.terminal-card { display: flex; flex-direction: column; gap: 12px; height: 500px; min-height: 280px; }
-.terminal-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; }
-.terminal-toolbar button:disabled { opacity: .5; cursor: default; }
-.terminal-error { margin: 0; color: #b4183f; overflow-wrap: anywhere; max-height: 72px; overflow: auto; }
-.terminal-error:empty { display: none; }
-.terminal-holder { flex: 1; min-height: 0; min-width: 0; display: flex; }
-[data-terminal-screen] { flex: 1; min-width: 0; min-height: 0; overflow: hidden; padding: 12px; border-radius: 12px; background: var(--dark); }
-[data-terminal-screen] .xterm { height: 100%; }
-/* The extra navigation item needs the two-row header a little earlier. */
-@media (min-width: 1001px) and (max-width: 1180px) {
-  header { flex-wrap: wrap; }
-  #nav { order: 5; width: 100%; justify-content: space-between; }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-terminal-screen] .xterm-cursor-blink { animation: none !important; }
-}
+.terminal-card { display:flex;flex-direction:column;gap:var(--space-3);height:500px;min-height:280px; }.terminal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex:none}.terminal-error{margin:0;color:var(--bad);overflow-wrap:anywhere;max-height:72px;overflow:auto}.terminal-error:empty{display:none}.terminal-holder{flex:1;min-height:0;min-width:0;display:flex}[data-terminal-screen]{flex:1;min-width:0;min-height:0;overflow:hidden;padding:var(--space-3);border-radius:var(--r-md);background:var(--dark)}[data-terminal-screen] .xterm{height:100%}@media(prefers-reduced-motion:reduce){[data-terminal-screen] .xterm-cursor-blink{animation:none!important}}

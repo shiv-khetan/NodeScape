@@ -1,23 +1,17 @@
-.network > *, .network .card { min-width: 0; }
-.network .stats { display: flex; flex-wrap: wrap; gap: 12px 0; }
-.network .muted, .network .stats small { color: #555; }
-.network .stats b { color: var(--ink); white-space: normal; }
-.network .field::placeholder { color: #555; opacity: 1; }
-.network .stats > div { min-width: 0; flex: 1 1 140px; }
-.network .stats b { font-size: 28px; overflow-wrap: anywhere; }
-.network h2 { margin-bottom: 14px; }
-.network .card-top h2 { margin-bottom: 0; }
-.network h3 { font-size: 16px; font-weight: 500; overflow-wrap: anywhere; }
-.network-interfaces { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-.network-interfaces p { margin: 8px 0; overflow-wrap: anywhere; }
-.network .card-top { flex-wrap: wrap; gap: 12px; }
-.network-table { max-width: 100%; overflow-x: auto; }
-.network table { table-layout: fixed; }
-.network td, .network th { overflow-wrap: anywhere; }
-.network-default { background: #edf3ff; }
-.network-search { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 13px; }
-.network-search .field { flex: 1; min-width: 160px; }
-.network .field:focus-visible, .network button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-@media (min-width: 1001px) and (max-width: 1300px) { header:has([data-view="network"]) { flex-wrap: wrap; row-gap: 10px; } }
+.network { min-width:0; }.network .card { min-width:0; }
+.network table { table-layout:fixed; }.network td,.network th { overflow-wrap:anywhere; }
+.network .card:has(table) { padding:0; }.network .card>.card-top,.network .card>p { padding:var(--space-3) var(--space-4);margin:0; }
+.network .tag { max-width:100%;white-space:normal; }
+.network-default td { background:#edf3ff; }
+.interface-row { display:grid;grid-template-columns:180px 100px minmax(0,1fr);align-items:center;gap:var(--space-4);min-height:var(--row-height);border-top:1px solid var(--line);padding:var(--space-2) 0; }
+.interface-row p { display:inline;margin:0 var(--space-3) 0 0;overflow-wrap:anywhere; }
+.interface-row h3 { font-size:var(--font-body);font-weight:500;overflow-wrap:anywhere; }
+.interface-row .status { justify-self:start; }
+.network-interfaces { display:block; }
 
-.network .tag { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+#network-routes td:nth-child(1),#network-routes td:nth-child(3),#network-routes td:nth-child(5),#network-ports td:nth-child(3),#network-ports td:nth-child(4),#network-tailscale td:nth-child(2) { font-family:var(--mono);font-size:var(--font-code); }
+/* Interfaces has no table, so pad its rows like table cells instead of the panel. */
+.network #network-interfaces { padding:0; }
+.network #network-interfaces .interface-row { padding:var(--space-2) var(--space-4); }
+.card-tools { display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap; }
+.card-tools .search { width:240px; }

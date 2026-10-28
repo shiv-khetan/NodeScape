@@ -5,8 +5,8 @@ const conf = require('../src-tauri/tauri.conf.json');
 const { openDemo, nav } = require('./helpers');
 
 const win = conf.app.windows[0];
-const SIZES = [[win.minWidth, win.minHeight], [1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560, 1440]];
-const PAGES = ['Overview', 'Services', 'Processes', 'Logs', 'Scheduled'];
+const SIZES = [[win.minWidth, win.minHeight], [1000,800], [1024, 768], [1280, 800], [1440, 900], [1920, 1080], [2560, 1440]];
+const PAGES = ['Overview', 'Services', 'Processes', 'Logs', 'Scheduled', 'Network', 'Terminal', 'Files', 'Users'];
 
 // Everything that sticks out sideways: the page itself, the header, or content wider than its card.
 const overflow = page => page.evaluate(() => {
@@ -19,7 +19,7 @@ const overflow = page => page.evaluate(() => {
     }
   }
   // Header items must stay inside the window and not overlap each other.
-  const items = [...document.querySelectorAll('header > *')].map(e => e.getBoundingClientRect());
+  const items = [...document.querySelectorAll('.sidebar > *')].map(e => e.getBoundingClientRect());
   const hit = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
   items.forEach((r, i) => {
     if (r.right > innerWidth + 1) bad.push(`header item ${i} past the right edge`);
@@ -65,10 +65,11 @@ test('layout reflows while the window is resized', async ({ page }) => {
 test('very wide windows keep content at a readable width, centred', async ({ page }) => {
   await page.setViewportSize({ width: 2560, height: 1440 });
   await openDemo(page);
-  const [m, hd] = await Promise.all(['main', 'header'].map(s => page.locator(s).evaluate(e => e.getBoundingClientRect().toJSON())));
-  expect(m.width).toBeLessThanOrEqual(1800);
-  expect(Math.abs(m.left - (2560 - m.right))).toBeLessThan(2); // centred
-  expect(hd.width).toBe(m.width); // header lines up with the content
+  const [m, hd] = await Promise.all(['main', '.sidebar'].map(s => page.locator(s).evaluate(e => e.getBoundingClientRect().toJSON())));
+  expect(m.width - 48).toBeLessThanOrEqual(1800);
+  expect(Math.abs((m.left - hd.right) - (2560 - m.right))).toBeLessThan(2);
+  expect(hd.width).toBe(216);
+  expect(hd.left).toBe(0);
 });
 
 test('narrow windows stack cards instead of squeezing them', async ({ page }) => {

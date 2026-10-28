@@ -1,25 +1,10 @@
-.services table { table-layout: fixed; }
-.services .service-unit { width: 38%; }
-.services .service-state { width: 13%; }
-.services .service-enabled { width: 13%; }
-.services .service-actions { width: 36%; }
-.services .who > div { min-width: 0; overflow-wrap: anywhere; }
-.services .who small { display: block; color: #555; }
-.services .service-load { margin-top: 4px; }
-.services .acts { flex-wrap: wrap; }
-.services .acts button:disabled { opacity: .5; cursor: wait; }
-.services .acts button:focus-visible, .services .segtabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.services .card-top { flex-wrap: wrap; gap: 12px; }
-.services .service-actions-label { display: block; text-align: right; }
-.services-context { color: #555; font-size: 13px; margin: 0 0 16px; }
-#services-unavailable { max-width: 70ch; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-#services-empty { margin: 16px 12px 0; }
-@media (max-width: 1000px) {
-  .services td, .services th { padding-inline: 7px; }
-  .services .who { gap: 7px; }
-  .services .service-unit { width: 35%; }
-  .services .service-state { width: 14%; }
-  .services .service-enabled { width: 14%; }
-  .services .service-actions { width: 37%; }
-  .services .acts button { padding: 7px 10px; }
-}
+.services table { table-layout:fixed; }
+.services .service-unit { width:45%; }.services .service-state { width:14%; }.services .service-enabled { width:13%; }.services .service-actions { width:28%; }
+.services .who>div { display:flex;align-items:center;min-width:0;gap:var(--space-2); }
+.services .who p { flex:none;max-width:calc(100% - 8px);overflow-wrap:anywhere; }
+.services .who small { margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400; }
+.services .who .service-load { flex:none; }
+.services-context { color:var(--muted);font-size:var(--font-body);margin:0; }
+.service-actions-label { text-align:right; }
+#services-empty { padding:var(--space-4); }
+@media(max-width:1200px){.services .service-unit{width:40%}.services .service-actions{width:32%}}

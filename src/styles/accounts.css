@@ -1,36 +1,8 @@
-.accounts-page .hero { flex-wrap: wrap; }
-.accounts-page .toolbar { min-width: 0; }
-.accounts-page .card-top { flex-wrap: wrap; gap: 12px; }
-.accounts-page table { table-layout: fixed; }
-.accounts-page th, .accounts-page td { overflow-wrap: anywhere; }
-.accounts-page th { color: #555d6b; }
-.accounts-page .who small { display: block; color: #555d6b; }
-.accounts-page .accounts-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.accounts-page .tag { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
-.accounts-page .acts { flex-wrap: wrap; }
-.accounts-page .acts button { white-space: nowrap; }
-.accounts-page button:disabled { opacity: .5; cursor: default; }
-.accounts-page button:disabled:hover { background: #fff; color: inherit; }
-.accounts-note, #accounts-current, .accounts-protected { font-size: 12px; color: #555d6b; }
-#accounts-current { margin-bottom: 0; }
-.accounts-protected { display: block; text-align: right; margin-top: 6px; }
-.accounts-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
-#accounts-users th:nth-child(1) { width: 24%; }
-#accounts-users th:nth-child(2) { width: 9%; }
-#accounts-users th:nth-child(3) { width: 25%; }
-#accounts-users th:nth-child(4) { width: 18%; }
-#accounts-users th:nth-child(5) { width: 24%; }
-.accounts-dialog { max-height: 90vh; overflow-y: auto; }
-.accounts-dialog label { color: #555d6b; margin-top: 14px; }
-.accounts-dialog .field { min-width: 0; }
-.accounts-dialog p { overflow-wrap: anywhere; }
-.accounts-dialog [type="submit"]:disabled { opacity: .5; cursor: default; }
-@media (max-width: 1000px) {
-  .accounts-page td, .accounts-page th { padding-inline: 6px; }
-  .accounts-page .toolbar { width: 100%; }
-}
-/* The extra navigation item keeps the shared header on two lines at laptop widths. */
-@media (min-width: 1001px) and (max-width: 1600px) {
-  header { flex-wrap: wrap; }
-  #nav { order: 5; width: 100%; justify-content: space-between; overflow-x: auto; }
-}
+.accounts-page .accounts-tags { display:flex;flex-wrap:wrap;gap:var(--space-1); }
+.accounts-note,#accounts-current,.accounts-protected { color:var(--muted);font-size:var(--font-meta);margin:0; }
+.accounts-protected { display:block;text-align:left;line-height:var(--line-meta);padding:var(--space-2); }
+.accounts-check { display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-body); }
+#accounts-users th:nth-child(1){width:28%}#accounts-users th:nth-child(2){width:8%}#accounts-users th:nth-child(3){width:26%}#accounts-users th:nth-child(4){width:18%}#accounts-users th:nth-child(5){width:20%}
+.accounts-page .who>div { display:flex;align-items:center;gap:var(--space-2); }.accounts-page .who p { flex:none; }.accounts-page .who small { min-width:0;margin:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.accounts-dialog label { margin-top:var(--space-4); }
+.accounts-dialog p { overflow-wrap:anywhere; }

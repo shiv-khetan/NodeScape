@@ -24,13 +24,21 @@ export function uptime(sec) {
 }
 
 export const svcClass = u => (u.active === 'failed' ? 'bad' : u.sub === 'running' ? 'ok' : '');
-export const tag = u => `<span class="tag ${svcClass(u)}">${esc(u.sub)}</span>`;
+export const tag = u => `<span class="tag status ${svcClass(u)}">${esc(u.sub)}</span>`;
 export const stat = (label, value, on) => `<div class="${on ? 'on' : ''}"><small>${label}</small><b>${value}</b></div>`;
 export const agoLabel = s => (s >= 60 ? Math.round(s / 60) + 'm ago' : s + 's ago');
 
-export function head(title, sub, controls = '') {
-  return `<section class="hero"><h1>${title}</h1>${sub ? `<span class="hostchip">${sub}</span>` : ''}<div class="toolbar">${controls}</div></section>`;
+export function head(title, sub, controls = '', filters = '', actions = '') {
+  return `<section class="hero page-head"><div><h1>${title}</h1>${sub ? `<p class="page-meta">${sub}</p>` : ''}</div><div class="header-actions">${actions}</div></section><div class="page-toolbar">${controls}${filters}</div>`;
 }
 
-export const segTabs = (attr, cur, opts) => `<div class="segtabs">${opts.map(([v, label]) => `<button data-${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
+export const search = (id, label, value = '') => `<label class="search">${'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>'}<input class="field" type="search" id="${id}" aria-label="${label}" placeholder="${label}…" value="${esc(value)}"></label>`;
+export function dateTime(value) {
+  if (value == null || value === '' || value === 'n/a') return '—';
+  const date = new Date(value);
+  return Number.isNaN(+date) ? String(value) : date.toISOString().slice(0,16).replace('T',' ') + ' UTC';
+}
+
+// A filter group with one option is noise, so it renders nothing.
+export const segTabs = (attr, cur, opts) => opts.length < 2 ? '' : `<div class="segtabs" role="group">${opts.map(([v, label]) => `<button data-${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}" aria-pressed="${String(v) === String(cur)}">${label}</button>`).join('')}</div>`;
 

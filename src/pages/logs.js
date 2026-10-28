@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { esc, head, stat, segTabs, ICON } from '../ui/dom.js';
+import { esc, head, stat, segTabs, ICON, search } from '../ui/dom.js';
 import { parseLog, isErr, journalLimited } from '../ui/parse.js';
 
 export function render(txt) {
@@ -9,13 +9,12 @@ export function render(txt) {
   const limited = journalLimited(state.snap?.groups, txt);
   const access = state.snap?.groups?.length ? "Only this user's journal is visible" : `Only <b>${esc(host)}</b>'s own user journal is visible`;
   const errs = lines.filter(isErr).length;
-  return head('Logs', logUnit ? esc(logUnit) : 'all units', `
-    <input class="field" id="logunit" placeholder="Unit, e.g. nginx (blank = all)" value="${esc(logUnit)}">
-    ${segTabs('lines', logLines, [[100, '100'], [300, '300'], [1000, '1000']])}
-    <button class="round dark" data-act="refresh" title="Load">${ICON.refresh}</button>`) + `
+  return head('Logs', esc(host)+' · '+(logUnit ? esc(logUnit) : 'all units')+' · '+lines.length+' lines', `
+    ${search('logunit','Unit, e.g. nginx (blank = all)',logUnit)}
+    ${segTabs('logstate','all',[['all','All '+lines.length],['errors','Errors '+errs]]).replace('data-logstate="errors" class="','data-logstate="errors" class="'+(errs ? 'has-errors ' : ''))}
+    <button class="round dark" data-act="refresh" title="Load">${ICON.refresh}</button>`, '', segTabs('lines', logLines, [[100, '100'], [300, '300'], [1000, '1000']])) + `
   <section class="grid">
     ${limited ? `<article class="card full notice">${access}. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</article>` : ''}
-    <article class="card full"><div class="stats">${stat('Lines', lines.length, true)}${stat('Errors', errs)}${stat('From', lines.length ? esc(parseLog(lines[0]).time) : '—')}${stat('To', lines.length ? esc(parseLog(lines.at(-1)).time) : '—')}</div></article>
     <article class="card full"><div class="loglist">${lines.map(l => {
       const e = parseLog(l);
       return `<div class="logrow ${isErr(l) ? 'err' : ''}"><time>${esc(e.time)}</time><span class="tag">${esc(e.unit.replace(/\[\d+\]$/, '')) || 'log'}</span><span class="msg">${esc(e.msg)}</span></div>`;
@@ -36,6 +35,10 @@ export function mount(el, { refresh }) {
   }, { signal: events.signal });
   el.addEventListener('click', e => {
     const ds = e.target.closest('button')?.dataset;
+    if (ds?.logstate) {
+      el.querySelectorAll('[data-logstate]').forEach(b => { b.classList.toggle('on', b === e.target.closest('button')); b.setAttribute('aria-pressed', String(b.classList.contains('on'))); });
+      el.querySelectorAll('.logrow').forEach(r => { r.hidden = ds.logstate === 'errors' && !r.classList.contains('err'); });
+    }
     if (ds?.lines) { state.logLines = +ds.lines; refresh(); }
     if (ds?.act === 'refresh') load();
   }, { signal: events.signal });

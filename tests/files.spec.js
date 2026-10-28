@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openDemo, nav } = require('./helpers');
+const { openDemo, nav, openRowMenu } = require('./helpers');
 const unicode = 'ü ñ 文件 test.txt';
 const row = (page, name) => page.locator('.files-row').filter({ has: page.locator('.file-name', { hasText: name }) });
 async function openFiles(page) { await openDemo(page); await nav(page, 'Files'); await expect(page.locator('#files-path')).toHaveValue('/'); }
@@ -20,20 +20,28 @@ test('create folder and empty file, rename refuses collisions', async ({ page })
   await page.getByRole('button', { name: 'New folder', exact: true }).click(); await nameDialog(page, 'new folder');
   await expect(row(page, 'new folder')).toBeVisible();
   await page.getByRole('button', { name: 'New file', exact: true }).click(); await nameDialog(page, 'new file.txt');
-  await row(page, 'new file.txt').getByRole('button', { name: 'Rename', exact: true }).click(); await nameDialog(page, 'renamed ü.txt');
+  await openRowMenu(row(page,'new file.txt')); await row(page, 'new file.txt').getByRole('button', { name: 'Rename', exact: true }).click(); await nameDialog(page, 'renamed ü.txt');
   await expect(row(page, 'renamed ü.txt')).toBeVisible();
-  await row(page, 'renamed ü.txt').getByRole('button', { name: 'Rename', exact: true }).click(); await nameDialog(page, unicode);
+  await openRowMenu(row(page,'renamed ü.txt')); await row(page, 'renamed ü.txt').getByRole('button', { name: 'Rename', exact: true }).click(); await nameDialog(page, unicode);
   await expect(page.locator('#files-error')).toContainText('exists');
 });
 test('delete cancellation and recursive second confirmation are explicit', async ({ page }) => {
   await openFiles(page);
-  page.once('dialog', d => d.dismiss());
-  await row(page, unicode).getByRole('button', { name: 'Delete', exact: true }).click(); await expect(row(page, unicode)).toBeVisible();
-  let dialogs = 0; page.on('dialog', async d => { dialogs++; await d.accept(); });
-  await row(page, 'documents').getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Delete recursively' })).toBeVisible();
-  await page.getByRole('button', { name: 'Delete recursively' }).click();
-  await expect(row(page, 'documents')).toHaveCount(0); expect(dialogs).toBe(2);
+  page.on('dialog', async d => { await d.dismiss(); throw new Error('Unexpected native dialog'); });
+  await openRowMenu(row(page,unicode));
+  await row(page,unicode).getByRole('button',{name:'Delete',exact:true}).click();
+  await page.locator('.confirm-dialog [data-cancel]').click();
+  await expect(row(page,unicode)).toBeVisible();
+  expect(await page.evaluate(()=>window.__calls.filter(c=>c.cmd==='file_delete').length)).toBe(0);
+  await openRowMenu(row(page,'documents'));
+  await row(page,'documents').getByRole('button',{name:'Delete',exact:true}).click();
+  await page.locator('.confirm-dialog button.danger').click();
+  await expect(page.getByRole('button',{name:'Delete recursively',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Delete recursively',exact:true}).click();
+  await expect(page.locator('.confirm-dialog button.danger')).toBeDisabled();
+  await page.getByLabel('I confirm deleting this folder and all its contents recursively').check();
+  await page.locator('.confirm-dialog button.danger').click();
+  await expect(row(page,'documents')).toHaveCount(0);
   expect(await page.evaluate(() => window.__calls.filter(x => x.cmd === 'file_delete').map(x => x.args.recursive))).toEqual([false, true]);
 });
 test('editor sends SHA-256 and preserves text on fingerprint conflict', async ({ page }) => {

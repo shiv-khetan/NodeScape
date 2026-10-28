@@ -89,8 +89,8 @@ test('manage servers renames and edits profiles, and removal confirms', async ({
   await page.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await page.getByLabel('Server name').fill('Renamed'); await page.getByLabel('SSH target').fill('operator@box.example');
   await page.getByRole('button', { name: 'Save changes' }).click(); await expect(page.locator('[data-server-row]').first()).toContainText('Renamed');
-  page.once('dialog', d => d.dismiss()); await page.getByRole('button', { name: 'Remove', exact: true }).first().click(); expect(await calls(page, 'profile_remove')).toHaveLength(0);
-  page.once('dialog', d => d.accept()); await page.getByRole('button', { name: 'Remove', exact: true }).first().click(); expect(await calls(page, 'profile_remove')).toHaveLength(1);
+  await page.getByRole('button', { name: 'Remove', exact: true }).first().click(); await page.locator('.confirm-dialog [data-cancel]').click(); expect(await calls(page, 'profile_remove')).toHaveLength(0);
+  await page.getByRole('button', { name: 'Remove', exact: true }).first().click(); await page.locator('.confirm-dialog button.danger').click(); await expect.poll(async()=> (await calls(page,'profile_remove')).length).toBe(1);
 });
 test('legacy target migrates once with its config; demo is ignored', async ({ page }) => {
   await installBackend(page, { host: 'legacy', profiles: [] }); await page.addInitScript(() => localStorage.setItem('sshConfig','C:/synthetic/legacy config')); await page.goto(APP);

@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openServer, nav } = require('./helpers');
+const { openServer, nav, clickService } = require('./helpers');
 const F = require('./fixtures');
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
@@ -16,7 +16,7 @@ async function open(page, actions = ['ok']) {
   await expect(page.locator('.hero h1')).toHaveText('Services');
 }
 async function start(page) {
-  await page.locator('[data-svc="start"]').first().click();
+  await clickService(page,'start','nginx.service');
 }
 async function clean(page) {
   await expect(page.locator('.sudo-dialog')).toHaveCount(0);
@@ -30,9 +30,8 @@ async function clean(page) {
 test('start stop and restart succeed without a password dialog', async ({ page }) => {
   await open(page, ['ok', 'ok', 'ok']);
   for (const action of ['start', 'stop', 'restart']) {
-    if (action !== 'start') page.once('dialog', d => d.accept());
-    await page.locator('[data-svc="' + action + '"]').first().click();
-    await expect(page.locator('#toast')).toContainText(action + ' nginx.service: ok');
+    await clickService(page,action,'nginx.service');
+    await expect(page.locator('#toast')).toContainText(({start:'Started',stop:'Stopped',restart:'Restarted'}[action])+' nginx.service on testbox');
   }
   expect((await calls(page)).map(c => c.args.password)).toEqual([null, null, null]);
   await clean(page);
@@ -48,12 +47,12 @@ test('password is used once and cleared immediately while the retry is pending',
   await expect(password(page)).toBeFocused();
   await password(page).fill(secret);
   await password(page).evaluate(el => { window.__submittedSudoField = el; });
-  await dialog(page).getByRole('button', { name: 'Run action' }).click();
+  await dialog(page).getByRole('button', { name: 'Start nginx.service' }).click();
   await expect.poll(() => page.evaluate(() => window.__pending.length)).toBe(1);
   expect(await page.evaluate(() => window.__submittedSudoField.value)).toBe('');
   await clean(page);
   await page.evaluate(() => window.__pending.shift()());
-  await expect(page.locator('#toast')).toContainText('nginx.service: ok');
+  await expect(page.locator('#toast')).toContainText('Started nginx.service on testbox');
   expect((await calls(page)).map(c => c.args.password)).toEqual([null, '[redacted]']);
   await clean(page);
 });
@@ -63,14 +62,14 @@ test('wrong password re-prompts with a blank focused field and a safe error', as
   await start(page);
   for (let i = 0; i < 2; i++) {
     await password(page).fill(secret);
-    await dialog(page).getByRole('button', { name: 'Run action' }).click();
+    await dialog(page).getByRole('button', { name: 'Start nginx.service' }).click();
     await expect(dialog(page).getByRole('alert')).toHaveText('Incorrect password. Try again.');
     await expect(password(page)).toHaveValue('');
     await expect(password(page)).toBeFocused();
   }
   await password(page).fill(secret);
   await password(page).press('Enter');
-  await expect(page.locator('#toast')).toContainText('nginx.service: ok');
+  await expect(page.locator('#toast')).toContainText('Started nginx.service on testbox');
   expect(await calls(page)).toHaveLength(4);
   await clean(page);
 });
@@ -109,7 +108,7 @@ test('a later action starts without a cached password', async ({ page }) => {
     await expect(password(page)).toHaveValue('');
     await password(page).fill(secret);
     await password(page).press('Enter');
-    await expect(page.locator('#toast')).toContainText('nginx.service: ok');
+    await expect(page.locator('#toast')).toContainText('Started nginx.service on testbox');
     await clean(page);
   }
   expect((await calls(page)).map(c => c.args.password)).toEqual([null, '[redacted]', null, '[redacted]']);

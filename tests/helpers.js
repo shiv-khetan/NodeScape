@@ -9,6 +9,7 @@ async function offline(page) {
   await page.route(/^https?:/, route => new URL(route.request().url()).origin === new URL(APP).origin ? route.continue() : route.abort());
 }
 async function installBackend(page, options = {}) {
+  page.on('dialog', async dialog => { await dialog.dismiss(); throw new Error('Unexpected native ' + dialog.type() + ' dialog'); });
   await offline(page);
   await page.addInitScript({ content: fixture + '\nwindow.installDemoBackend(' + JSON.stringify(options) + ');' });
 }
@@ -26,3 +27,18 @@ async function openServer(page, responses, host = 'testbox') {
 }
 const nav = (page, name) => page.locator('#nav button', { hasText: name }).click();
 module.exports = { APP, offline, installBackend, openDemo, openServer, nav };
+
+async function clickService(page, action, unit, decision = 'accept') {
+  const button = page.locator('[data-svc="' + action + '"]' + (unit ? '[data-u="' + unit + '"]' : '')).first();
+  if (!await button.isVisible()) await button.locator('xpath=ancestor::tr').getByRole('button', { name: /More actions/ }).click();
+  await button.click();
+  if (['stop','restart','disable'].includes(action)) {
+    const dialog = page.locator('.confirm-dialog');
+    await expect(dialog).toContainText('Server'); await expect(dialog).toContainText('Scope');
+    await expect(dialog).toContainText('Requires administrator password');
+    await dialog.locator(decision === 'cancel' ? '[data-cancel]' : 'button.danger').click();
+  }
+}
+async function openRowMenu(row) { await row.getByRole('button', { name: /More actions/ }).click(); }
+module.exports.clickService = clickService;
+module.exports.openRowMenu = openRowMenu;

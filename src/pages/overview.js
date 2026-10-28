@@ -24,8 +24,8 @@ export function render(d) {
     <h1>Overview</h1>
     <span class="hostchip" title="${esc(d.os)}">${esc(d.host)} · ${esc(d.ip || host)}</span>
     <div class="toolbar">
-      <span class="tag ok">${running.length} running</span>
-      <span class="tag ${failed.length ? 'bad' : ''}">${failed.length} failed</span>
+      <button class="tag status ok" data-go="services" data-service-filter="running">${running.length} running</button>
+      <button class="tag status ${failed.length ? 'bad' : ''}" data-go="services" data-service-filter="failed">${failed.length} failed</button>
       <button class="tbtn" data-act="live" aria-pressed="${live}">${live ? ICON.pause + ' Live' : ICON.play + ' Paused'}</button>
     </div>
   </section>

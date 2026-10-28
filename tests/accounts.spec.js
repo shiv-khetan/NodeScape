@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { APP, installBackend, nav } = require('./helpers');
+const { APP, installBackend, nav, openRowMenu } = require('./helpers');
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 const calls = page => page.evaluate(() => window.__calls.filter(c => c.cmd === 'account_action'));
 const row = (page, name) => page.locator('#accounts-users tbody tr').filter({ has: page.getByText(name, { exact: true }) });
@@ -16,17 +16,19 @@ async function add(page, name = 'newuser', groups = '') {
   await page.getByRole('button', { name: 'Create user', exact: true }).click();
 }
 async function group(page, action, name = 'alice', value = 'team') {
+  if(action === 'Remove group') await openRowMenu(row(page,name));
   await row(page, name).getByRole('button', { name: action, exact: true }).click();
   await page.getByLabel('Group', { exact: true }).selectOption(value);
   await page.getByRole('dialog').getByRole('button', { name: action, exact: true }).click();
 }
 async function remove(page, home) {
+  await openRowMenu(row(page,'alice'));
   await row(page, 'alice').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Keep the home directory unless');
   await expect(page.getByLabel('Also delete the home directory')).not.toBeChecked();
   await page.getByLabel('I confirm deleting this user').check();
   if (home) await page.getByLabel('Also delete the home directory').check();
-  await page.getByRole('button', { name: 'Delete user', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete alice', exact: true }).click();
 }
 
 test('users, groups, stats and limited sudo scope', async ({ page }) => {
@@ -34,7 +36,7 @@ test('users, groups, stats and limited sudo scope', async ({ page }) => {
   await expect(page.locator('#accounts-users tbody tr:visible')).toHaveCount(2);
   await expect(row(page, 'alice')).toContainText('sudo');
   await expect(page.locator('#accounts-groups')).toContainText('team');
-  await expect(page.locator('.stats')).toContainText('Login users');
+  await expect(page.locator('.page-toolbar')).toContainText('Login users');
   await expect(page.getByText('Only group-based sudo is shown. Rules in sudoers are not read.', { exact: true })).toBeVisible();
   await expect(page.locator('#accounts-current')).toHaveText('SSH user: operator');
 });
@@ -58,7 +60,7 @@ test('create user prompts for sudo, clears the secret and refreshes', async ({ p
   await add(page, 'newuser', 'team, sudo');
   await expect(page.getByRole('dialog', { name: 'Administrator permission' })).toBeVisible();
   await page.getByLabel('Sudo password').fill('synthetic-accounts-password');
-  await page.getByRole('button', { name: 'Run action' }).click();
+  await page.locator('.sudo-dialog button[type="submit"]').click();
   await expect(row(page, 'newuser')).toBeVisible();
   expect((await calls(page)).map(c => c.args.password)).toEqual([null, '[redacted]']);
   expect((await calls(page))[1].args.args).toEqual({ name: 'newuser', groups: ['team', 'sudo'] });
@@ -84,7 +86,7 @@ for (const action of ['Add group', 'Remove group']) {
     await open(page);
     await group(page, action, 'alice', action === 'Add group' ? 'extra' : 'team');
     await page.getByLabel('Sudo password').fill('synthetic');
-    await page.getByRole('button', { name: 'Run action' }).click();
+    await page.locator('.sudo-dialog button[type="submit"]').click();
     await expect(page.locator('#toast')).toContainText('completed');
     if (action === 'Add group') await expect(row(page, 'alice')).toContainText('extra');
     else await expect(row(page, 'alice').locator('[data-group-tag="team"]')).toHaveCount(0);
@@ -96,7 +98,7 @@ for (const home of [false, true]) {
   test('delete user with removeHome=' + home, async ({ page }) => {
     await open(page); await remove(page, home);
     await page.getByLabel('Sudo password').fill('synthetic');
-    await page.getByRole('button', { name: 'Run action' }).click();
+    await page.locator('.sudo-dialog button[type="submit"]').click();
     await expect(row(page, 'alice')).toHaveCount(0);
     expect((await calls(page)).at(-1).args.args).toEqual({ name: 'alice', removeHome: home });
   });
@@ -104,8 +106,9 @@ for (const home of [false, true]) {
 
 test('deletion requires confirmation and cancelling leaves the account intact', async ({ page }) => {
   await open(page);
+  await openRowMenu(row(page,'alice'));
   await row(page, 'alice').getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Delete user', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Delete alice', exact: true })).toBeDisabled();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
   expect(await calls(page)).toHaveLength(0);
   await expect(row(page, 'alice')).toBeVisible();
@@ -114,9 +117,11 @@ test('deletion requires confirmation and cancelling leaves the account intact', 
 test('root current user and system accounts show refusal reasons', async ({ page }) => {
   await open(page); await page.getByLabel('Show system accounts').check();
   for (const name of ['root', 'operator', 'daemon', 'nobody']) {
+    await openRowMenu(row(page,name));
     await expect(row(page, name).getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
     await expect(row(page, name).getByRole('button', { name: 'Remove group', exact: true })).toBeDisabled();
     await expect(row(page, name)).toContainText('Protected');
+    await page.keyboard.press('Escape');
   }
 });
 
@@ -158,7 +163,7 @@ test('switching target while sudo is open prevents the retry', async ({ page }) 
   await open(page); await add(page);
   await page.getByLabel('Sudo password').fill('synthetic');
   await page.evaluate(async () => { const { selectTarget } = await import('/state.js'); selectTarget('other-testbox'); });
-  await page.getByRole('button', { name: 'Run action' }).click();
+  await page.locator('.sudo-dialog button[type="submit"]').click();
   await expect(page.locator('.sudo-dialog')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
 });
@@ -186,6 +191,7 @@ for (const [width, height] of [[800, 600], [1024, 768], [1280, 800], [1440, 900]
     expect(await page.getByRole('dialog').evaluate(e => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && e.scrollWidth <= e.clientWidth; })).toBe(true);
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
     for (const action of ['Add group', 'Remove group', 'Delete']) {
+      if(action !== 'Add group') await openRowMenu(row(page,'alice'));
       await row(page, 'alice').getByRole('button', { name: action, exact: true }).click();
       expect(await page.getByRole('dialog').evaluate(e => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && e.scrollWidth <= e.clientWidth; })).toBe(true);
       await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();

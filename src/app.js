@@ -1,5 +1,7 @@
 import * as backend from './backend.js';
 import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } from './state.js';
+import { initMenus } from './ui/menu.js';
+import { cancelConfirm } from './ui/confirm.js';
 import { $, esc } from './ui/dom.js';
 import { parseSnapshot } from './ui/parse.js';
 import * as overview from './pages/overview.js';
@@ -14,6 +16,7 @@ import * as onboarding from './pages/onboarding.js';
 import * as servers from './pages/servers.js';
 import * as accounts from './pages/accounts.js';
 
+initMenus();
 const main = $('#main'), hostInput = $('#host');
 const routes = {
   onboarding: { page: onboarding, load: async () => null },
@@ -28,13 +31,21 @@ const routes = {
   logs: { page: logs, load: target => backend.logs(target, state.logUnit || null, state.logLines) },
   timers: { page: scheduled, load: target => backend.query(target, 'timers') },
 };
+function updateNavigation(view) {
+  document.querySelectorAll('.sidebar button').forEach(button => {
+    const route = button.dataset.view || ({addServer:'onboarding',manageServers:'servers'}[button.id]);
+    const selected = route === view;
+    button.classList.toggle('on', selected);
+    if (selected) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
+  });
+}
 let mounted;
-function dispose() { mounted?.dispose?.(); mounted = null; }
+function dispose() { cancelConfirm(); mounted?.dispose?.(); mounted = null; }
 
 async function refresh(fromTimer) {
   if (fromTimer === true && state.busy) return;
   if (!state.host && state.view !== 'servers') state.view = 'onboarding';
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.view === state.view));
+  updateNavigation(state.view);
   const terminalChanged = terminal.targetChanged();
   if (state.view === 'terminal' && mounted === terminal && !terminalChanged) return;
   const request = beginRequest();
@@ -65,10 +76,12 @@ async function refresh(fromTimer) {
     dispose();
     const host = request.target.host;
     const hostKey = error.kind === 'host_key_unknown' || error.kind === 'host_key_changed';
-    main.innerHTML = `<div class="empty"><h1>Can't reach ${esc(host)}</h1><p class="error">${esc(error.message)}</p>
+    main.innerHTML = `<div class="empty"><h1>Can't reach ${esc(host)}</h1><pre class="error">${esc(error.message)}</pre>
       <p>${hostKey
         ? `The server's host key isn't trusted yet, or it changed. NodeScape never accepts host keys on its own: connect once with <code>ssh ${esc(host)}</code> in a terminal and check the fingerprint.`
-        : `Check that <code>ssh ${esc(host)}</code> works in a terminal without a password prompt.`}</p></div>`;
+        : `Check that <code>ssh ${esc(host)}</code> works in a terminal without a password prompt.`}</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button><button data-go="terminal">Open terminal</button></div></div>`;
+    main.querySelector('[data-retry]').onclick = () => refresh();
+    main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
   } finally {
     if (isCurrent(request)) {
       state.busy = false;
@@ -80,7 +93,7 @@ function go(view) {
   if (!routes[view]) return;
   dispose();
   state.view = view;
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+  updateNavigation(view);
   main.innerHTML = '';
   refresh();
 }
@@ -90,8 +103,14 @@ $('#nav').addEventListener('click', e => {
 });
 main.addEventListener('click', e => {
   const ds = e.target.closest('button')?.dataset;
+  if (ds?.serviceFilter) { state.svcState = ds.serviceFilter; state.svcFilter = ''; }
   if (ds?.go) go(ds.go);
   if (ds?.unit) { state.logUnit = ds.unit; go('logs'); }
+});
+main.addEventListener('input', e => {
+  if (!e.target.matches('[data-list-search]')) return;
+  const q = e.target.value.toLowerCase();
+  main.querySelectorAll('tbody tr, .logrow').forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(q); });
 });
 $('#refresh').addEventListener('click', () => refresh());
 hostInput.addEventListener('change', () => {

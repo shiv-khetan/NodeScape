@@ -1,6 +1,6 @@
 // End-to-end flows in the test-only fake desktop backend.
 const { test, expect } = require('@playwright/test');
-const { openDemo, nav } = require('./helpers');
+const { openDemo, nav, clickService } = require('./helpers');
 
 test.beforeEach(async ({ page }) => openDemo(page));
 
@@ -45,18 +45,18 @@ test('services search and state tabs filter rows', async ({ page }) => {
 test('start and stop change the service state', async ({ page }) => {
   await nav(page, 'Services');
   const row = page.locator('tr', { hasText: 'backup.service' });
-  await row.locator('[data-svc="start"]').click();
-  await expect(page.locator('#toast')).toHaveText('start backup.service: ok');
+  await clickService(page,'start','backup.service');
+  await expect(page.locator('#toast')).toHaveText('Started backup.service on nas-01');
   await expect(row.locator('.tag')).toHaveText('running');
 
-  page.once('dialog', d => d.accept());
-  await row.locator('[data-svc="stop"]').click();
+  await clickService(page,'stop','backup.service');
   await expect(row.locator('.tag')).toHaveText('dead');
 });
 
 test('a service "logs" button opens its logs', async ({ page }) => {
   await nav(page, 'Services');
-  await page.locator('tr', { hasText: 'jellyfin.service' }).getByRole('button', { name: 'logs' }).click();
+  await page.locator('tr', { hasText: 'jellyfin.service' }).getByRole('button', { name: /More actions/ }).click();
+  await page.locator('tr', { hasText: 'jellyfin.service' }).getByRole('button', { name: 'Logs', exact:true }).click();
   await expect(page.locator('.hero h1')).toHaveText('Logs');
   await expect(page.locator('#logunit')).toHaveValue('jellyfin.service');
   await expect(page.locator('.logrow').first()).toContainText('jellyfin');

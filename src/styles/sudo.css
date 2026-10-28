@@ -1,9 +1,1 @@
-.sudo-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
-.sudo-dialog p { color: #555; margin: 0 0 18px; }
-.sudo-dialog label { color: var(--ink); }
-.sudo-dialog .field { min-width: 0; }
-.sudo-dialog .field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sudo-dialog .sudo-error { min-height: 1.4em; color: #b4183f; font-size: 13px; margin: 10px 0 18px; }
-.sudo-dialog button:hover { background: var(--line); }
-.sudo-dialog button.primary { background: var(--dark); }
-.sudo-dialog button.primary:hover { background: #36383f; }
+.sudo-dialog p { color:var(--muted); }.sudo-dialog .sudo-error { color:var(--bad);min-height:20px; }

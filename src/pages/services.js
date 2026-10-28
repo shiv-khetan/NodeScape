@@ -1,7 +1,9 @@
 import { state, currentTarget, requestContext, isCurrent } from '../state.js';
 import { serviceAction } from '../backend.js';
+import { confirmAction } from '../ui/confirm.js';
+import { rowMenu } from '../ui/menu.js';
 import { withSudo } from '../ui/sudo.js';
-import { esc, head, stat, svcClass, tag, segTabs, toast } from '../ui/dom.js';
+import { esc, head, stat, svcClass, tag, segTabs, toast, search } from '../ui/dom.js';
 
 let scope = 'system', scopeGeneration = 0, data, events, pending;
 const unitState = u => u.active === 'failed' ? 'failed' : u.sub === 'running' ? 'running' : 'inactive';
@@ -11,30 +13,17 @@ export function render(d) {
   const { svcFilter, svcState } = state;
   const selected = d[scope], units = selected.units;
   const n = value => units.filter(u => unitState(u) === value).length;
-  const rows = units.map(u => `
-    <tr data-q="${esc((u.name + ' ' + u.description).toLowerCase())}" data-st="${unitState(u)}">
-      <td><div class="who"><span class="ic ${svcClass(u)}">${esc(u.name[0])}</span><div><p>${esc(u.name)}</p><small>${esc(u.description)}</small>${u.load !== 'loaded' ? `<small class="service-load">${esc(u.load)}</small>` : ''}</div></div></td>
-      <td>${tag(u)}</td>
-      <td><span data-enabled>${esc(u.enabled)}</span></td>
-      <td><div class="acts">
-        ${['start', 'stop', 'restart', 'enable', 'disable'].map(a => `<button data-svc="${a}" data-u="${esc(u.name)}"${pending ? ' disabled' : ''}>${a}</button>`).join('')}
-        ${scope === 'system' ? `<button data-unit="${esc(u.name)}">logs</button>` : ''}
-      </div></td>
-    </tr>`).join('');
+  const actionButton = (u, a) => `<button data-svc="${a}" data-u="${esc(u.name)}" class="${['stop','disable'].includes(a) ? 'destructive' : ''}"${pending ? ' disabled' : ''}>${a[0].toUpperCase()+a.slice(1)}</button>`;
+  const rows = [...units].sort((a,b) => Number(unitState(b) === 'failed') - Number(unitState(a) === 'failed')).map(u => {
+    const st = unitState(u);
+    const visible = st === 'running' ? ['restart','stop'] : st === 'failed' ? ['restart'] : ['start'];
+    const logs = scope === 'system' ? `<button data-unit="${esc(u.name)}">Logs</button>` : '';
+    const menu = ['start','stop','restart','enable','disable'].filter(a => !visible.includes(a)).map(a => actionButton(u,a)).join('') + (st === 'failed' ? '' : logs);
+    return `<tr data-q="${esc((u.name + ' ' + u.description).toLowerCase())}" data-st="${st}"><td><div class="who"><div><p>${esc(u.name)}</p><small title="${esc(u.description)}">${esc(u.description)}</small>${u.load !== 'loaded' ? `<small class="service-load">${esc(u.load)}</small>` : ''}</div></div></td><td>${tag(u)}</td><td><span data-enabled>${esc(u.enabled)}</span></td><td><div class="acts">${visible.map(a => actionButton(u,a)).join('')}${st === 'failed' ? logs : ''}${rowMenu(u.name,menu)}</div></td></tr>`;
+  }).join('');
   const available = scope === 'system' || selected.available;
-  return head('Services', `${esc(state.host)} · systemd`, `<input class="field" id="filter" type="search" aria-label="Search services" placeholder="Search services…" value="${esc(svcFilter)}">`) + `
-  <section class="grid services">
-    <article class="card full">
-      <div class="card-top"><h2>Service scope</h2>${segTabs('scope', scope, [['system', 'System'], ['user', 'User']])}</div>
-      <p class="services-context">${scope === 'system' ? 'System services · actions may require administrator permission.' : 'Services owned by this SSH account · no administrator permission needed.'}</p>
-      ${available ? `<div class="stats">${stat('Total units', units.length, true)}${stat('Running', n('running'))}${stat('Failed', n('failed'))}${stat('Inactive', n('inactive'))}</div>` : `<p id="services-unavailable" role="status">${esc(selected.reason || 'User manager unavailable for this SSH account.')}</p>`}
-    </article>
-    ${available ? `<article class="card full">
-      <div class="card-top"><h2>All services</h2>${segTabs('state', svcState, [['all', 'All'], ['running', 'Running'], ['failed', 'Failed'], ['inactive', 'Inactive']])}</div>
-      <table><colgroup><col class="service-unit"><col class="service-state"><col class="service-enabled"><col class="service-actions"></colgroup><thead><tr><th scope="col">Unit</th><th scope="col">State</th><th scope="col">Enabled</th><th scope="col"><span class="service-actions-label">Actions</span></th></tr></thead><tbody>${rows}</tbody></table>
-      <p id="services-empty" class="services-context" hidden>No services match this filter.</p>
-    </article>` : ''}
-  </section>`;
+  const counts = segTabs('state', svcState, [['all', 'All '+units.length], ['running', 'Running '+n('running')], ['failed', 'Failed '+n('failed')], ['inactive', 'Inactive '+n('inactive')]]).replace('data-state="failed" class="','data-state="failed" class="'+(n('failed') ? 'has-errors ' : ''));
+  return head('Services', `${esc(state.host)} · systemd · ${units.length} units`, search('filter','Search services',svcFilter), counts, segTabs('scope',scope,[['system','System'],['user','User']])) + `<section class="grid services"><p class="services-context">${scope === 'system' ? 'System services · actions may require administrator permission.' : 'Services owned by this SSH account · no administrator permission needed.'}</p>${available ? `<article class="card full"><table><colgroup><col class="service-unit"><col class="service-state"><col class="service-enabled"><col class="service-actions"></colgroup><thead><tr><th scope="col">Unit</th><th scope="col">State</th><th scope="col">Enabled</th><th scope="col" class="service-actions-label">Actions</th></tr></thead><tbody>${rows}</tbody></table><p id="services-empty" class="services-context" hidden>No services match this filter.</p></article>` : `<p id="services-unavailable" role="status">${esc(selected.reason || 'User manager unavailable for this SSH account.')}</p>`}</section>`;
 }
 
 function applyFilter(el) {
@@ -79,7 +68,9 @@ export function mount(el, { refresh }) {
     if (!action || pending) return;
     const target = currentTarget(), request = requestContext(), actionScope = scope, generation = scopeGeneration;
     const current = () => isCurrent(request) && scopeGeneration === generation;
-    if (['stop', 'restart', 'disable'].includes(action) && !confirm(`${action} ${unit} on ${target.host} (${actionScope})?`)) return;
+    const verb = action[0].toUpperCase() + action.slice(1);
+    if (['stop', 'restart', 'disable'].includes(action) && !await confirmAction({ verb, object: unit, server: target.host, scope: actionScope, password: actionScope === 'system' ? 'maybe' : 'no', explanation: { stop: 'The service will stop until it is started again.', restart: 'The service will briefly stop while it restarts.', disable: 'The service will no longer start automatically.' }[action] })) return;
+    if (!current() || pending) return;
     const token = {};
     pending = token;
     el.querySelectorAll('[data-svc]').forEach(b => { b.disabled = true; });
@@ -88,9 +79,9 @@ export function mount(el, { refresh }) {
         if (!current()) throw { kind: 'cancelled', message: 'Action cancelled' };
         return serviceAction(target, unit, action, password, actionScope);
       };
-      await (actionScope === 'system' ? withSudo(run) : run());
+      await (actionScope === 'system' ? withSudo(run, verb + ' ' + unit) : run());
       if (!current()) return;
-      toast(`${action} ${unit}: ok`);
+      toast(`${{start:'Started',stop:'Stopped',restart:'Restarted',enable:'Enabled',disable:'Disabled'}[action]} ${unit} on ${target.host}`);
       refresh();
     } catch (err) {
       if (!current() || err.kind === 'cancelled') return;

@@ -9,7 +9,7 @@ function update() {
   if (!mounted || !session) return;
   const status = mounted.querySelector('[data-terminal-status]');
   status.textContent = session.status;
-  status.className = 'tag' + (session.status === 'Connected' ? ' ok' : session.error ? ' bad' : '');
+  status.className = 'tag status' + (session.status === 'Connected' ? ' ok' : session.error ? ' bad' : '');
   mounted.querySelector('[data-terminal-error]').textContent = session.error;
   mounted.querySelector('[data-terminal-connect]').textContent = session.attempted ? 'Reconnect' : 'Connect';
   mounted.querySelector('[data-terminal-connect]').disabled = session.status === 'Connecting…';
@@ -105,7 +105,7 @@ export function targetChanged() {
   return true;
 }
 export function render() {
-  return head('Terminal', esc(currentTarget().host)) + '<article class="card terminal-card"><div class="terminal-toolbar"><span class="tag" data-terminal-status role="status">Disconnected</span><div class="acts"><button data-terminal-connect>Connect</button><button data-terminal-disconnect disabled>Disconnect</button></div></div><p class="terminal-error" data-terminal-error role="alert"></p><div class="terminal-holder"></div></article>';
+  return head('Terminal', esc(currentTarget().host)) + '<article class="card terminal-card"><div class="terminal-toolbar"><span class="tag status" data-terminal-status role="status">Disconnected</span><div class="acts"><button data-terminal-connect>Connect</button><button data-terminal-disconnect disabled>Disconnect</button></div></div><p class="terminal-error" data-terminal-error role="alert"></p><div class="terminal-holder"></div></article>';
 }
 export function mount(el) {
   mounted = el;

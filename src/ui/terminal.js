@@ -5,10 +5,12 @@ export function createTerminal(onData) {
   const element = document.createElement('div');
   element.dataset.terminalScreen = '';
   element.setAttribute('aria-label', 'SSH terminal');
+  const tokens = getComputedStyle(document.documentElement);
+  const color = name => tokens.getPropertyValue(name).trim();
   const term = new Terminal({
     fontFamily: '"Cascadia Mono", Consolas, monospace', fontSize: 14,
     cursorBlink: true, screenReaderMode: true, scrollback: 5000,
-    theme: { background: '#1c1d21', foreground: '#f8f9fb', cursor: '#a9c6ff', selectionBackground: '#2f6bff66' },
+    theme: { background: color('--dark'), foreground: color('--on-accent'), cursor: color('--accent-soft'), selectionBackground: color('--accent-text') },
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
