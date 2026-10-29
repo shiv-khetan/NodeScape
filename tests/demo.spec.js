@@ -5,7 +5,7 @@ const { openDemo, nav, clickService } = require('./helpers');
 test.beforeEach(async ({ page }) => openDemo(page));
 
 test('overview shows every card', async ({ page }) => {
-  for (const title of ['CPU', 'Load', 'Memory', 'CPU history', 'Network in', 'Network out', 'Services', 'Recent journal']) {
+  for (const title of ['CPU', 'Memory', 'Temperatures', 'Recent journal', 'Services', 'Network in', 'Network out']) {
     await expect(page.locator('.card h2', { hasText: new RegExp(`^${title}$`) })).toBeVisible();
   }
   await expect(page.locator('.page-meta')).toContainText('nas-01');

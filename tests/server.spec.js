@@ -17,8 +17,8 @@ test.describe('overview with server data', () => {
 
   test('computes CPU, load and uptime', async ({ page }) => {
     await expect(page.locator('.stats .on b')).toHaveText('50%');
-    await expect(page.locator('.gauge .c b')).toHaveText('13%'); // load 0.50 on 4 cores
-    await expect(page.locator('.uptime-card .huge')).toHaveText('1d 1h');
+    await expect(page.locator('.cpu .card-top')).toContainText('load 13% of 4 cores'); // load 0.50 on 4 cores
+    await expect(page.locator('.system-strip b')).toHaveText('Up 1d 1h');
   });
 
   test('labels binary sizes as GiB', async ({ page }) => {
@@ -38,8 +38,8 @@ test.describe('overview with server data', () => {
     await expect(page.locator('.svcs .status.ok')).toHaveCount(2);
   });
 
-  test('uptime card lists Tailscale but not down interfaces', async ({ page }) => {
-    const p = page.locator('.uptime-card p', { hasText: 'kernel' });
+  test('system strip lists Tailscale but not down interfaces', async ({ page }) => {
+    const p = page.locator('.system-strip');
     await expect(p).toContainText('tailscale0 100.64.0.2/32');
     await expect(p).not.toContainText('docker0');
   });
@@ -88,19 +88,19 @@ test('processes page parses ps output', async ({ page }) => {
 
 test('unknown host key shows how to trust it safely', async ({ page }) => {
   await openServer(page, { snapshot: { error: { kind: 'host_key_unknown', message: 'Trust check rejected the connection.' } } });
-  await expect(page.locator('.empty h1')).toHaveText("Can't reach testbox");
-  await expect(page.locator('.empty')).toContainText("host key isn't trusted yet");
+  await expect(page.locator('.unreachable h2')).toHaveText("Can't reach testbox");
+  await expect(page.locator('.unreachable')).toContainText("host key isn't trusted yet");
   await expect(page.locator('.error')).toHaveText('Trust check rejected the connection.');
   const changed = await page.context().newPage();
   await openServer(changed, { snapshot: { error: { kind: 'host_key_changed', message: 'The key differs.' } } });
-  await expect(changed.locator('.empty')).toContainText("host key isn't trusted yet");
+  await expect(changed.locator('.unreachable')).toContainText("host key isn't trusted yet");
   await changed.close();
 });
 
 test('other connection errors show the ssh message', async ({ page }) => {
   await openServer(page, { snapshot: { error: { kind: 'timeout', message: 'ssh: connect to host 10.0.0.2 port 22: Connection timed out' } } });
   await expect(page.locator('.error')).toContainText('Connection timed out');
-  await expect(page.locator('.empty')).toContainText('Check the network or Tailscale connection to testbox');
+  await expect(page.locator('.unreachable')).toContainText('Check the network or Tailscale connection to testbox');
 });
 
 test('settings default applies to new servers and leaves saved targets unchanged', async ({ page }) => {

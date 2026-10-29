@@ -6,15 +6,6 @@ test.beforeEach(async ({ page }) => openDemo(page));
 
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
-test('load gauge value and caption do not overlap', async ({ page }) => {
-  const value = await page.locator('.gauge .c b').boundingBox();
-  const caption = await page.locator('.gauge .c span').boundingBox();
-  expect(overlap(value, caption)).toBe(false);
-  // Glyphs overflow a line box shorter than the font size, so boxes alone can miss the overlap.
-  const fontSize = await page.locator('.gauge .c b').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
-  expect(value.height).toBeGreaterThanOrEqual(fontSize);
-});
-
 test('problem rows use a tint, never a colored side stripe', async ({ page }) => {
   for (const name of ['Services', 'Logs']) {
     await nav(page, name);

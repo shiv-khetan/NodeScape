@@ -1,7 +1,7 @@
 import { state, history } from '../state.js';
 import { pct, avg, gib, rate, uptime, esc, stat, tag, ICON, head, agoLabel, plural } from '../ui/dom.js';
 import { parseLog, isErr, temperatureLabels } from '../ui/parse.js';
-import { bars, gauge, stepChart, dotCard } from '../ui/charts.js';
+import { stepChart, dotCard } from '../ui/charts.js';
 
 import { performServiceAction } from './services.js';
 
@@ -34,16 +34,11 @@ export function render(d) {
   <section class="grid overview-grid">
     ${problemRow}
     <article class="card cpu">
-      <div class="card-top"><h2>CPU</h2><button class="round" data-go="processes" title="Processes">${ICON.arrow}</button></div>
+      <div class="card-top"><h2>CPU</h2><span class="muted">${[cpuSamples.length ? 'avg ' + avg(cpuSamples).toFixed(0) + '%' : '', loadPct === null ? '' : 'load ' + loadPct + '% of ' + d.cpus + ' cores'].filter(Boolean).join(' · ')}</span><button class="round" data-go="processes" title="Processes">${ICON.arrow}</button></div>
       <div class="stats">
         ${stat('Usage now', Number.isFinite(d.cpu) ? Math.round(d.cpu) + '%' : 'Unavailable', true)}${stat('Load 1m', load(d.load[0]))}${stat('Load 5m', load(d.load[1]))}${stat('Load 15m', load(d.load[2]))}${stat('Cores', d.cpus ?? 'Unavailable')}
       </div>
-      ${bars(hist.cpu)}
-    </article>
-
-    <article class="card">
-      <div class="card-top"><h2>Load</h2></div>
-      ${gauge(loadPct, d.load[0], d.cpus)}
+      ${stepChart(hist.cpu.slice(-20))}
     </article>
 
     <article class="card">
@@ -55,26 +50,7 @@ export function render(d) {
       ${meters.map((m, i) => `<div class="meter"><div><span>${esc(m[0])}</span><b>${pct(m[1], m[2])}% of ${gib(m[2])}</b></div><div class="track"><i class="${meterClass(pct(m[1], m[2]))}" style="width:${pct(m[1], m[2])}%"></i></div></div>`).join('')}
     </article>
 
-    <article class="card history">
-      <div class="card-top"><h2>CPU history</h2><span class="muted">${cpuSamples.length ? 'avg ' + avg(cpuSamples).toFixed(0) + '%' : 'Unavailable'}</span></div>
-      ${stepChart(hist.cpu.slice(-20))}
-    </article>
-
-    ${dotCard('Network in', hist.rx, d.rx, 'green', rate)}
-
-    <article class="card uptime-card">
-      <div class="card-top"><h2>Uptime</h2></div>
-      <b class="huge">${uptime(d.up)}</b>
-      <p class="muted">${esc(d.host)} is up and reachable.</p>
-      <p class="muted">${esc(d.os)} · kernel ${esc(d.kernel)}<br>${d.net.filter(n => n[0] !== 'lo' && n[1] !== 'DOWN').map(n => esc(n[0] + ' ' + (n[2] || ''))).join(' · ')}</p>
-    </article>
-
-    ${dotCard('Network out', hist.tx, d.tx, 'blue', rate)}
-
-    <article class="card">
-      <div class="card-top"><h2>Services</h2><button class="round" data-go="services" title="All services">${ICON.arrow}</button></div>
-      <div class="svcs">${top.map(u => `<button class="svc" data-unit="${esc(u.unit)}" title="Show logs"><span class="nm">${esc(u.unit.replace(/\.service$/, ''))}</span>${tag(u)}</button>`).join('')}</div>
-    </article>
+    ${temperatureCard(d.temps)}
 
     <article class="card logs">
       <div class="card-top"><h2>Recent journal</h2><button class="pill" data-go="logs">All logs ›</button></div>
@@ -85,7 +61,15 @@ export function render(d) {
       }).join('') || '<p class="unavailable">No journal entries available.</p>'}</div>
     </article>
 
-    ${temperatureCard(d.temps)}
+    <article class="card services-card">
+      <div class="card-top"><h2>Services</h2><button class="round" data-go="services" title="All services">${ICON.arrow}</button></div>
+      <div class="svcs">${top.map(u => `<button class="svc" data-unit="${esc(u.unit)}" title="Show logs"><span class="nm">${esc(u.unit.replace(/\.service$/, ''))}</span>${tag(u)}</button>`).join('')}</div>
+    </article>
+
+    ${dotCard('Network in', hist.rx, d.rx, 'green', rate)}
+    ${dotCard('Network out', hist.tx, d.tx, 'blue', rate)}
+
+    <p class="full system-strip muted"><b>Up ${uptime(d.up)}</b> · ${esc(d.os)} · kernel ${esc(d.kernel)} · ${d.net.filter(n => n[0] !== 'lo' && n[1] !== 'DOWN').map(n => esc(n[0] + ' ' + (n[2] || ''))).join(' · ')}</p>
   </section>`;
 }
 

@@ -27,7 +27,7 @@ async function capture() {
     await page.locator('tr[data-st="running"] [data-svc="stop"]').first().click(); await page.waitForSelector('.confirm-dialog');
     await page.screenshot({path:path.join(dir,'confirm-'+width+'.png'),fullPage:false}); await page.locator('.confirm-dialog [data-cancel]').click();
     await page.evaluate(()=>{const invoke=window.__TAURI__.core.invoke;window.__TAURI__.core.invoke=(cmd,args)=>cmd==='query'&&args.what==='snapshot'?Promise.reject({kind:'timeout',message:'ssh: synthetic connection timed out'}):invoke(cmd,args);});
-    await page.locator('[data-view="overview"]').click(); await page.waitForSelector('.empty pre');
+    await page.locator('[data-view="overview"]').click(); await page.waitForSelector('.unreachable pre');
     await page.screenshot({path:path.join(dir,'error-'+width+'.png'),fullPage:true});
   }
   await browser.close();

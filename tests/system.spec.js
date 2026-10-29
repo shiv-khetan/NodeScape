@@ -90,7 +90,8 @@ test('missing memory, swap, disks and load stay unavailable', async ({ page }) =
   await expect(card(page, 'Memory')).toContainText('Memory unavailable');
   await expect(card(page, 'Memory')).toContainText('Swap unavailable');
   await expect(card(page, 'Memory')).toContainText('Disk usage unavailable');
-  await expect(card(page, 'Load')).toContainText('Load unavailable');
+  await expect(card(page, 'CPU').locator('.stats div', { hasText: 'Load 1m' })).toContainText('Unavailable');
+  await expect(card(page, 'CPU').locator('.card-top')).not.toContainText('load');
   await expect(card(page, 'Memory')).not.toContainText('0.0 GiB');
   await expect(page.locator('#main')).not.toContainText('NaN');
 });
@@ -126,7 +127,7 @@ test('counter resets create unavailable samples and charts recover', async ({ pa
   await expect(page.locator('.dotcard .huge')).toHaveText(['Unavailable', 'Unavailable']);
   await page.locator('#refresh').click();
   await expect.poll(async () => (await page.evaluate(async () => (await import('/state.js')).history().cpu)).length).toBe(2);
-  await expect(card(page, 'CPU history')).toContainText('Collecting samples (2 of 5)…');
+  await expect(card(page, 'CPU')).toContainText('Collecting samples (2 of 5)…');
   expect(await parsed(page)).toMatchObject({ cpu: null, rx: null, tx: null });
   await page.evaluate(async valid => {
     const old = window.__TAURI__.core.invoke;

@@ -52,7 +52,7 @@ test('CSP header blocks inline script, eval and external connections; charts and
     await expect.poll(()=>page.evaluate(async()=>(await import('/state.js')).history().cpu.length)).toBe(n);
   }
   await expect(page.locator('.step svg')).toBeVisible();
-  expect(await page.locator('.bar.now i').evaluate(el => parseFloat(getComputedStyle(el).height))).toBeGreaterThan(0);
+  expect(await page.locator('.meter .track i').first().evaluate(el => parseFloat(getComputedStyle(el).width))).toBeGreaterThan(0);
   const result = await page.evaluate(async () => {
     const violations = [];
     document.addEventListener('securitypolicyviolation', e => violations.push(e.effectiveDirective));

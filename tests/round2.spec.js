@@ -59,22 +59,21 @@ test('freshness ticks while paused and retains old data after a failed refresh',
 test('charts collect five real samples before occupying chart space', async ({page})=>{
   await open(page);
   for(let n=1;n<=4;n++) {
-    await expect(page.locator('.collecting')).toHaveCount(4);
+    await expect(page.locator('.collecting')).toHaveCount(3);
     await expect(card(page,'CPU')).toContainText('Collecting samples ('+n+' of 5)…');
     await expect(page.locator('.bars,.step,.dots,.vs')).toHaveCount(0);
-    expect((await card(page,'CPU history').boundingBox()).height).toBeLessThan(160);
     await page.locator('#refresh').click();
     await expect.poll(()=>page.evaluate(async()=> (await import('/state.js')).history().cpu.length)).toBe(n+1);
   }
   await expect(page.locator('.collecting')).toHaveCount(0);
-  await expect(page.locator('.bars,.step')).toHaveCount(2);
+  await expect(page.locator('.step')).toHaveCount(1);
   await expect(page.locator('.vs')).toHaveCount(2);
 });
 
 test('Overview meters, charts, uptime and journal stay flat and calm',async({page})=>{
   await open(page);
   for(let n=0;n<4;n++)await page.locator('#refresh').click();
-  await expect(card(page,'Uptime')).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await expect(page.locator('.system-strip')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
   await expect(page.locator('.segline,.svcs .ic')).toHaveCount(0);
   const fills=await page.locator('.meter .track i,.bars i').evaluateAll(items=>items.map(e=>getComputedStyle(e).backgroundImage));
   expect(fills.length).toBeGreaterThan(0);expect(fills.every(v=>v==='none')).toBe(true);
@@ -148,7 +147,7 @@ test('one refresh, named filter groups and header primary actions on every page'
     if(['Files','Users'].includes(name))await expect(page.locator('.header-actions .primary')).toBeVisible();
   }
   await nav(page,'Logs');
-  await expect(page.locator('#logunit')).toHaveAttribute('placeholder','Filter by unit (blank = all units)');
+  await expect(page.locator('#logunit')).toHaveAttribute('placeholder','Filter by unit…');
   await page.locator('#logunit').fill('caddy');await page.locator('#logunit').press('Tab');
   await expect.poll(async()=>(await calls(page,'logs')).at(-1).args.unit).toBe('caddy');
   await page.locator('#logunit').fill('ssh');await page.locator('#refresh').click();
@@ -192,10 +191,10 @@ test('action failures persist as dismissible inline alerts',async({page})=>{
 
 for(const [kind,advice,terminal] of [['unreachable','Check the network or Tailscale connection to testbox',false],['timeout','Check the network or Tailscale connection to testbox',false],['auth_failed','Check the SSH key or agent for testbox',true],['host_key_unknown','fingerprint',false],['host_key_changed','fingerprint',false],['permission_denied','permission',true],['sudo_required','administrator',true],['remote','Synthetic problem',true]])test('error guidance for '+kind,async({page})=>{
   await openServer(page,{snapshot:{error:{kind,message:'Synthetic problem'}}});
-  await expect(page.locator('.empty')).toContainText(advice);
-  await expect(page.locator('#nav [aria-current]')).toHaveCount(0);
+  await expect(page.locator('.unreachable')).toContainText(advice);
+  await expect(page.locator('#nav [aria-current]')).toHaveAttribute('data-view','overview');
   await expect(page.getByRole('button',{name:'Open terminal',exact:true})).toHaveCount(terminal?1:0);
-  expect(await page.locator('.empty').evaluate(e=>getComputedStyle(e).marginLeft)).toBe('0px');
+  await expect(page.locator('.hero h1')).toHaveText('Overview');
   if(kind.startsWith('host_key_')){
     await page.getByRole('button',{name:'Approve host key',exact:true}).click();
     await expect(page.getByRole('heading',{name:'Trust the host key'})).toBeVisible();

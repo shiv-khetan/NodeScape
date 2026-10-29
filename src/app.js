@@ -3,7 +3,7 @@ import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } 
 import { initMenus } from './ui/menu.js';
 import { cancelConfirm } from './ui/confirm.js';
 import { openPalette } from './ui/palette.js';
-import { $, esc } from './ui/dom.js';
+import { $, esc, head } from './ui/dom.js';
 import { errorAdvice, canOpenTerminal, hostKeyError, showError } from './ui/errors.js';
 import { parseSnapshot } from './ui/parse.js';
 import * as overview from './pages/overview.js';
@@ -86,8 +86,8 @@ async function refresh(fromTimer) {
       overview.mount(main, { refresh, go, profilesChanged });
       showError(error, main, host);
     } else {
-      updateNavigation(null);
-      main.innerHTML = '<div class="empty"><h1>Can\'t reach ' + esc(host) + '</h1><pre class="error" role="alert">' + esc(error.message) + '</pre><p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></div>';
+      const title = document.querySelector('#nav [data-view="' + request.view + '"]')?.getAttribute('aria-label') || 'NodeScape';
+      main.innerHTML = head(esc(title), esc(host) + ' · unreachable') + '<section class="grid"><article class="card full unreachable" role="alert"><h2>Can&#39;t reach ' + esc(host) + '</h2><pre class="error">' + esc(error.message) + '</pre><p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></article></section>';
       main.querySelector('[data-retry]').onclick = () => refresh();
       main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
     }
