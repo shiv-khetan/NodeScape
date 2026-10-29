@@ -339,3 +339,4 @@ input[type="checkbox"] { accent-color:var(--accent-fill); }
 .unreachable .dlg-actions { justify-content:flex-start;flex-wrap:wrap; }
 .logday { position:sticky;top:0;z-index:1;padding:var(--space-2) var(--space-4);background:var(--bg);border-bottom:1px solid var(--line);font-size:var(--font-meta);font-weight:500;color:var(--muted); }
 .logday[hidden] { display:none; }
+button.primary:disabled, button.danger:disabled { opacity:.45; }
