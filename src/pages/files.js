@@ -23,7 +23,7 @@ export function load(target) {
 }
 
 export function render() {
-  return head('Files', esc(currentTarget().host)+' · SFTP', search('files-filter','Search files') + segTabs('file-kind','all',[['all','All'],['file','Files'],['dir','Folders']]) + '<div class="toolbar-actions"><button class="pill" data-file-action="mkdir">New folder</button><button class="pill" data-file-action="create">New file</button></div>', '', '<button class="pill primary" data-file-action="upload">Upload</button>') + '<section class="files grid">' +
+  return head('Files', esc(currentTarget().host)+' · SFTP', search('files-filter','Search files') + segTabs('file-kind','all',[['all','All'],['file','Files'],['dir','Folders']]), '', '<button class="pill" data-file-action="mkdir">New folder</button><button class="pill" data-file-action="create">New file</button><button class="pill primary" data-file-action="upload">Upload</button>') + '<section class="files grid">' +
     '<article class="card full files-browser">' +
       '<form id="files-location" class="files-location"><label for="files-path">Remote path</label>' +
       '<input class="field mono" id="files-path" spellcheck="false" autocomplete="off" value="' + esc(view.path) + '">' +

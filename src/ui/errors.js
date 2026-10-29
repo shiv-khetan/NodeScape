@@ -9,7 +9,7 @@ export function errorAdvice(error, host) {
   if (error.kind?.startsWith('sudo')) return 'This action needs administrator permission. Check the password and sudo access for this SSH account.';
   return '';
 }
-export function showError(error, el, host) {
+export function showError(error, el, host, { note = '', retry } = {}) {
   let alert = el.querySelector('.action-alert');
   if (!alert) {
     alert = document.createElement('div');
@@ -17,6 +17,7 @@ export function showError(error, el, host) {
     (el.querySelector('.page-head') || el.firstElementChild)?.after(alert);
   }
   const advice = errorAdvice(error, host);
-  alert.innerHTML = '<div><span>' + esc(error.message) + '</span>' + (advice ? '<p>' + esc(advice) + '</p>' : '') + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + '</div><button class="ghost" aria-label="Dismiss error">Dismiss</button>';
+  alert.innerHTML = '<div><span>' + esc(error.message) + '</span>' + (advice ? '<p>' + esc(advice) + '</p>' : '') + (note ? '<p class="muted">' + esc(note) + '</p>' : '') + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (retry ? '<button data-alert-retry>Retry</button>' : '') + '</div><button class="ghost" aria-label="Dismiss error">Dismiss</button>';
   alert.querySelector('[aria-label="Dismiss error"]').onclick = () => alert.remove();
+  if (retry) alert.querySelector('[data-alert-retry]').onclick = retry;
 }

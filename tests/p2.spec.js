@@ -13,7 +13,7 @@ test('Overview has one CPU card with load against cores, and no separate Load or
   await expect(page.locator('.gauge, .bars')).toHaveCount(0);
   const cpu = card(page, 'CPU');
   await expect(cpu.locator('.step svg')).toBeVisible();
-  await expect(cpu).toContainText(/load \d+% of 8 cores/);
+  await expect(cpu.locator('.stats')).toContainText('Load 1m');
 });
 
 test('Overview drill-downs come before network, system details sit in one strip', async ({ page }) => {

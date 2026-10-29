@@ -34,10 +34,9 @@ test('network port search and filters live with the ports table', async ({ page 
   await expect(page.locator('.page-meta')).toContainText('listening port');
 });
 
-test('files toolbar groups create and upload actions; no root-only breadcrumb', async ({ page }) => {
+test('files header groups create and upload actions; no root-only breadcrumb', async ({ page }) => {
   await nav(page, 'Files');
-  const toolbar = page.locator('.page-toolbar');
-  for (const action of ['mkdir', 'create']) await expect(toolbar.locator(`[data-file-action="${action}"]`)).toBeVisible();
+  for (const action of ['mkdir', 'create']) await expect(page.locator(`.header-actions [data-file-action="${action}"]`)).toBeVisible();
   await expect(page.locator('.header-actions [data-file-action="upload"]')).toBeVisible();
   await expect(page.locator('#files-crumbs')).toBeHidden();
 });

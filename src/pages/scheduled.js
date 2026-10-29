@@ -17,12 +17,12 @@ export function render(txt) {
     <article class="card full">
       <div class="card-top"><h2>Timers</h2></div>
       <table><thead><tr><th>Timer</th><th>Runs</th><th>Next</th><th>Last</th><th>State</th></tr></thead><tbody>
-      ${timers.map(t => `<tr><td><div class="who"><span class="ic ok">${esc((t.Id || '?')[0])}</span><div><p>${esc(t.Id)}</p></div></div></td><td><button class="pill" data-unit="${esc(t.Unit)}">${esc(t.Unit)}</button></td><td class="num">${when(t.NextElapseUSecRealtime)}</td><td class="num muted">${when(t.LastTriggerUSec)}</td><td><span class="tag status ${t.ActiveState === 'active' ? 'ok' : ''}">${esc(t.ActiveState)}</span></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No timers found.</td></tr>'}
+      ${timers.map(t => `<tr><td><div class="who"><span class="ic ok">${esc((t.Id || '?')[0])}</span><div><p>${esc(t.Id)}</p></div></div></td><td><div class="acts runs"><button data-unit="${esc(t.Unit)}" title="Show logs">${esc(t.Unit)}</button></div></td><td class="num">${when(t.NextElapseUSecRealtime)}</td><td class="num muted">${when(t.LastTriggerUSec)}</td><td><span class="tag status ${t.ActiveState === 'active' ? 'ok' : ''}">${esc(t.ActiveState)}</span></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No timers found.</td></tr>'}
       </tbody></table>
     </article>
     <article class="card full">
       <div class="card-top"><h2>Crontab</h2><span class="muted">current user</span></div>
-      <div class="loglist">${cron.map(([w, cmd]) => `<div class="logrow"><span class="mono">${esc(w)}</span><span class="msg mono">${esc(cmd)}</span></div>`).join('') || '<p class="muted">No crontab entries.</p>'}</div>
+      ${cron.length ? `<table><thead><tr><th>Schedule</th><th>Command</th></tr></thead><tbody>${cron.map(([w, cmd]) => `<tr><td class="mono">${esc(w)}</td><td class="mono">${esc(cmd)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No crontab entries.</p>'}
     </article>
   </section>`;
 }

@@ -64,9 +64,10 @@ test('a service "logs" button opens its logs', async ({ page }) => {
 
 test('scheduled page shows timers and every cron line, including @reboot', async ({ page }) => {
   await nav(page, 'Scheduled');
-  await expect(page.locator('tbody tr')).toHaveCount(5);
-  await expect(page.locator('.loglist .logrow')).toHaveCount(3);
-  await expect(page.locator('.loglist')).toContainText('@reboot');
+  const cron = page.locator('article', { has: page.getByRole('heading', { name: 'Crontab' }) });
+  await expect(page.locator('article', { has: page.getByRole('heading', { name: 'Timers' }) }).locator('tbody tr')).toHaveCount(5);
+  await expect(cron.locator('tbody tr')).toHaveCount(3);
+  await expect(cron).toContainText('@reboot');
 });
 
 test('log line count can be changed', async ({ page }) => {

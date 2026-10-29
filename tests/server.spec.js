@@ -17,7 +17,7 @@ test.describe('overview with server data', () => {
 
   test('computes CPU, load and uptime', async ({ page }) => {
     await expect(page.locator('.stats .on b')).toHaveText('50%');
-    await expect(page.locator('.cpu .card-top')).toContainText('load 13% of 4 cores'); // load 0.50 on 4 cores
+    await expect(page.locator('.cpu .stats div', { hasText: 'Load 1m' }).locator('b')).toHaveText('0.50');
     await expect(page.locator('.system-strip b')).toHaveText('Up 1d 1h');
   });
 

@@ -15,7 +15,8 @@ export function render(txt) {
     ${search('logunit','Filter by unit',logUnit).replace('<input ', '<input list="logunits" ')}<datalist id="logunits">${units.map(u => '<option value="' + esc(u) + '">').join('')}</datalist>
     ${search('logsearch','Search messages')}
     ${segTabs('logstate','all',[['all','All '+lines.length],['errors','Errors '+errs]]).replace('data-logstate="errors" class="','data-logstate="errors" class="'+(errs ? 'has-errors ' : ''))}
-`, '', segTabs('lines', logLines, [[100, '100'], [300, '300'], [1000, '1000']])) + `
+    ${segTabs('lines', logLines, [[100, '100 lines'], [300, '300 lines'], [1000, '1000 lines']])}
+`) + `
   <section class="grid">
     ${limited ? `<article class="card full notice">${access}. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</article>` : ''}
     <article class="card full"><div class="loglist">${lines.map(l => {

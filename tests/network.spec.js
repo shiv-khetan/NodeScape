@@ -13,7 +13,7 @@ test('all cards, IPv6 and multiple default routes', async ({page})=>{
   await open(page);
   for(const title of ['Interfaces','Routes','Listening ports','Firewall','Tailscale']) await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
   await expect(page.locator('#network-interfaces')).toContainText('2001:db8::2/64');
-  await expect(page.locator('.network-default')).toHaveCount(3);
+  await expect(page.locator('td .tag', { hasText: /^default$/ })).toHaveCount(3);
   await expect(page.locator('#network-routes')).toContainText('fe80::1');
   await expect(page.locator('#network-firewall')).toContainText('Permission needed to read rules');
   await expect(page.locator('#network-tailscale')).toContainText('peerbox');

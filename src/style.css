@@ -322,7 +322,9 @@ input[type="checkbox"] { accent-color:var(--accent-fill); }
 .palette kbd { font:inherit;font-size:var(--font-meta);color:var(--muted); }
 /* Overview rows: CPU+Memory+Temperatures, Journal+Services, Network in+out, then the system strip. */
 .overview-grid > .card.logs { grid-column:span 3; }
-.overview-grid .cpu .card-top .muted { margin-left:auto;margin-right:var(--space-3); }
+.overview-grid .card-top:has(> .round) > .muted { margin-left:auto;margin-right:var(--space-3); }
+.overview-grid .tip, .overview-grid .badge { border:0;background:none;padding:0 var(--space-1);color:var(--muted); }
+.more-running { align-self:flex-start;margin-top:var(--space-2);color:var(--muted); }
 .overview-grid .cpu .step { flex:1;min-height:120px;margin-top:var(--space-10, 40px); }
 .system-strip { margin:0;padding:var(--space-1) 0;font-size:var(--font-meta);overflow-wrap:anywhere; }
 .system-strip b { color:var(--ink);font-weight:500; }
@@ -340,3 +342,12 @@ input[type="checkbox"] { accent-color:var(--accent-fill); }
 .logday { position:sticky;top:0;z-index:1;padding:var(--space-2) var(--space-4);background:var(--bg);border-bottom:1px solid var(--line);font-size:var(--font-meta);font-weight:500;color:var(--muted); }
 .logday[hidden] { display:none; }
 button.primary:disabled, button.danger:disabled { opacity:.45; }
+.host-mono { display:none; }
+@media (max-width:1000px) {
+  .hostbox .host-mono:not(:empty) { display:grid;place-items:center;width:32px;height:32px;margin:auto;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);font-size:12px;font-weight:600;color:var(--ink);letter-spacing:.02em; }
+  .hostbox:has(.host-mono:not(:empty)) > svg { display:none; }
+}
+.stale { opacity:.5;filter:grayscale(1);transition:opacity .2s ease-out; }
+@media (prefers-reduced-motion:reduce) { .stale { transition:none; } }
+.acts.runs { justify-content:flex-start; }
+.acts.runs button { padding-left:0; }

@@ -21,8 +21,7 @@ export function render(d) {
   const load = v => Number.isFinite(v) ? v.toFixed(2) : 'Unavailable';
   const running = d.units.filter(u => u.sub === 'running');
   const failed = d.units.filter(u => u.active === 'failed');
-  const loadPct = Number.isFinite(d.load[0]) && d.cpus ? Math.min(100, pct(d.load[0], d.cpus)) : null;
-  const top = [...failed, ...running].slice(0, 6);
+  const top = running.slice(0, 6);
   const hasSwap = d.swap.length >= 3 && d.swap.every(v => Number.isFinite(v) && v >= 0) && d.swap[1] <= d.swap[0];
   const meters = [...(hasSwap && d.swap[0] > 0 ? [['Swap', d.swap[1], d.swap[0]]] : []), ...[...d.disks].sort((x, y) => y.size - x.size).slice(0, 3).map(x => [x.target, x.used, x.size])].filter(m => m[2]);
   const errors = d.journalLimited ? [] : d.log.filter(isErr);
@@ -34,7 +33,7 @@ export function render(d) {
   <section class="grid overview-grid">
     ${problemRow}
     <article class="card cpu">
-      <div class="card-top"><h2>CPU</h2><span class="muted">${[cpuSamples.length ? 'avg ' + avg(cpuSamples).toFixed(0) + '%' : '', loadPct === null ? '' : 'load ' + loadPct + '% of ' + d.cpus + ' cores'].filter(Boolean).join(' · ')}</span><button class="round" data-go="processes" title="Processes">${ICON.arrow}</button></div>
+      <div class="card-top"><h2>CPU</h2><span class="muted">${cpuSamples.length ? 'avg ' + avg(cpuSamples).toFixed(0) + '%' : ''}</span><button class="round" data-go="processes" title="Processes">${ICON.arrow}</button></div>
       <div class="stats">
         ${stat('Usage now', Number.isFinite(d.cpu) ? Math.round(d.cpu) + '%' : 'Unavailable', true)}${stat('Load 1m', load(d.load[0]))}${stat('Load 5m', load(d.load[1]))}${stat('Load 15m', load(d.load[2]))}${stat('Cores', d.cpus ?? 'Unavailable')}
       </div>
@@ -62,8 +61,8 @@ export function render(d) {
     </article>
 
     <article class="card services-card">
-      <div class="card-top"><h2>Services</h2><button class="round" data-go="services" title="All services">${ICON.arrow}</button></div>
-      <div class="svcs">${top.map(u => `<button class="svc" data-unit="${esc(u.unit)}" title="Show logs"><span class="nm">${esc(u.unit.replace(/\.service$/, ''))}</span>${tag(u)}</button>`).join('')}</div>
+      <div class="card-top"><h2>Services</h2><span class="muted">${running.length} running</span><button class="round" data-go="services" title="All services">${ICON.arrow}</button></div>
+      <div class="svcs">${top.map(u => `<button class="svc" data-unit="${esc(u.unit)}" title="Show logs"><span class="nm">${esc(u.unit.replace(/\.service$/, ''))}</span>${tag(u)}</button>`).join('') || '<p class="unavailable">No running services.</p>'}</div>${running.length > top.length ? `<button class="ghost more-running" data-go="services">+${running.length - top.length} more running</button>` : ''}
     </article>
 
     ${dotCard('Network in', hist.rx, d.rx, 'green', rate)}

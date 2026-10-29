@@ -3,7 +3,7 @@ import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } 
 import { initMenus } from './ui/menu.js';
 import { cancelConfirm } from './ui/confirm.js';
 import { openPalette } from './ui/palette.js';
-import { $, esc, head } from './ui/dom.js';
+import { $, esc, head, agoLabel } from './ui/dom.js';
 import { errorAdvice, canOpenTerminal, hostKeyError, showError } from './ui/errors.js';
 import { parseSnapshot } from './ui/parse.js';
 import * as overview from './pages/overview.js';
@@ -33,7 +33,12 @@ const routes = {
   logs: { page: logs, load: target => backend.logs(target, state.logUnit || null, state.logLines) },
   timers: { page: scheduled, load: target => backend.query(target, 'timers') },
 };
+// Short server tag for the icon-only sidebar: first letter plus the trailing digit ("nas-01" -> "N1"), else two letters.
+const monogram = name => { const clean = name.replace(/[^a-z0-9]/gi, ''), digit = name.match(/\d+$/); return (clean[0] + (digit ? digit[0].slice(-1) : clean[1] || '')).toUpperCase(); };
 function updateNavigation(view) {
+  const profile = state.profiles.find(p => p.id === state.profileId);
+  $('.host-mono').textContent = profile ? monogram(profile.name) : '';
+  $('.hostbox').title = profile ? 'Server: ' + profile.name : 'Saved server';
   document.querySelectorAll('.sidebar button').forEach(button => {
     const route = button.dataset.view || ({addServer:'onboarding',manageServers:'servers'}[button.id]);
     if (button.dataset.view) { const disabled = backend.available() && !state.profiles.length; button.disabled = disabled; button.setAttribute('aria-disabled', String(disabled)); }
@@ -43,6 +48,7 @@ function updateNavigation(view) {
   });
 }
 let mounted;
+const lastReached = {};
 function dispose() { cancelConfirm(); mounted?.dispose?.(); mounted = null; }
 
 async function refresh(fromTimer) {
@@ -72,6 +78,8 @@ async function refresh(fromTimer) {
     const focused = document.activeElement?.id;
     dispose();
     main.innerHTML = route.page.render(data);
+    main.dataset.page = request.view;
+    lastReached[request.target.host] = Date.now();
     mounted = route.page;
     mounted.mount?.(main, { refresh, go, profilesChanged });
     if (focused) main.querySelector('#' + focused)?.focus();
@@ -79,15 +87,23 @@ async function refresh(fromTimer) {
     if (!isCurrent(request)) return;
     dispose();
     const host = request.target.host;
+    const note = lastReached[host] ? 'Last reached ' + agoLabel(Math.round((Date.now() - lastReached[host]) / 1000)) : '';
+    const recover = { note, retry: () => refresh() };
     if (request.view === 'overview' && state.snap) {
       state.snapshotError = error;
       main.innerHTML = overview.render(state.snap);
       mounted = overview;
       overview.mount(main, { refresh, go, profilesChanged });
-      showError(error, main, host);
+      showError(error, main, host, recover);
+    } else if (main.dataset.page === request.view && main.querySelector('.page-head')) {
+      // Keep what this page last showed, dimmed and inert, under the error band.
+      main.querySelectorAll('.page-head ~ *').forEach(node => { node.inert = true; node.classList.add('stale'); });
+      const meta = main.querySelector('.page-meta');
+      if (meta && !/unreachable/.test(meta.textContent)) meta.append(' · unreachable');
+      showError(error, main, host, recover);
     } else {
       const title = document.querySelector('#nav [data-view="' + request.view + '"]')?.getAttribute('aria-label') || 'NodeScape';
-      main.innerHTML = head(esc(title), esc(host) + ' · unreachable') + '<section class="grid"><article class="card full unreachable" role="alert"><h2>Can&#39;t reach ' + esc(host) + '</h2><pre class="error">' + esc(error.message) + '</pre><p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></article></section>';
+      main.innerHTML = head(esc(title), esc(host) + ' · unreachable') + '<section class="grid"><article class="card full unreachable" role="alert"><h2>Can&#39;t reach ' + esc(host) + '</h2><pre class="error">' + esc(error.message) + '</pre>' + (note ? '<p class="muted">' + esc(note) + '</p>' : '') + '<p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></article></section>';
       main.querySelector('[data-retry]').onclick = () => refresh();
       main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
     }
@@ -197,7 +213,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === '/' && !ctrl && !typing(e.target)) {
-    const field = main.querySelector('.page-toolbar input[type=search], input[type=search]');
+    const field = main.querySelector('#logsearch') || main.querySelector('.page-toolbar input[type=search], input[type=search]');
     if (field) { e.preventDefault(); field.focus(); }
     return;
   }
