@@ -41,7 +41,7 @@ test('unreachable server keeps the page header and sidebar context', async ({ pa
   await expect(page.locator('#nav [aria-current]')).toHaveAttribute('data-view', 'overview');
   const alert = page.locator('.unreachable');
   await expect(alert).toHaveAttribute('role', 'alert');
-  await expect(alert.getByRole('heading')).toHaveText("Can't reach testbox");
+  await expect(alert.getByRole('heading')).toHaveText("Can’t reach testbox");
   await expect(alert).toContainText('No route to host');
   await expect(alert.getByRole('button', { name: 'Retry' })).toBeVisible();
 });

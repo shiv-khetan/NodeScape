@@ -7,4 +7,4 @@
 .services-context { color:var(--muted);font-size:var(--font-body);margin:0; }
 .service-actions-label { text-align:end; }
 #services-empty { padding:var(--space-4); }
-@media(max-width:1200px){.services .service-unit{width:40%}.services .service-actions{width:32%}}
+@media(width <= 1200px){.services .service-unit{width:40%}.services .service-actions{width:32%}}

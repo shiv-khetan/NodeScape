@@ -15,7 +15,7 @@ for (const [unit, action] of [['ssh.service', 'stop'], ['tailscaled.service', 's
   await openDemo(page);
   await nav(page, 'Services');
   const dialog = await menuAction(page, unit, action);
-  await expect(dialog).toContainText("can end NodeScape's connection");
+  await expect(dialog).toContainText("can end NodeScape’s connection");
   await expect(dialog).toContainText('physical access');
   const submit = dialog.locator('[type=submit]');
   await expect(submit).toBeDisabled();

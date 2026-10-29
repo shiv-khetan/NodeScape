@@ -61,7 +61,7 @@ test('scheduled page works when the user has no crontab', async ({ page }) => {
 test('logs page hides journalctl notices and explains the limited view', async ({ page }) => {
   await openServer(page, { snapshot: F.SNAPSHOT, logs: F.LOGS_LIMITED });
   await nav(page, 'Logs');
-  await expect(page.locator('.notice')).toContainText("Only testbox's own user journal is visible");
+  await expect(page.locator('.notice')).toContainText("Only testbox’s own user journal is visible");
   await expect(page.locator('.logrow')).toHaveCount(3);
   await expect(page.locator('.logrow').first().locator('time')).toHaveText('09:00:00');
   await expect(page.locator('.logrow', { hasText: 'Hint' })).toHaveCount(0);
@@ -88,12 +88,12 @@ test('processes page parses ps output', async ({ page }) => {
 
 test('unknown host key shows how to trust it safely', async ({ page }) => {
   await openServer(page, { snapshot: { error: { kind: 'host_key_unknown', message: 'Trust check rejected the connection.' } } });
-  await expect(page.locator('.unreachable h2')).toHaveText("Can't reach testbox");
-  await expect(page.locator('.unreachable')).toContainText("host key isn't trusted yet");
+  await expect(page.locator('.unreachable h2')).toHaveText("Can’t reach testbox");
+  await expect(page.locator('.unreachable')).toContainText("host key isn’t trusted yet");
   await expect(page.locator('.error')).toHaveText('Trust check rejected the connection.');
   const changed = await page.context().newPage();
   await openServer(changed, { snapshot: { error: { kind: 'host_key_changed', message: 'The key differs.' } } });
-  await expect(changed.locator('.unreachable')).toContainText("host key isn't trusted yet");
+  await expect(changed.locator('.unreachable')).toContainText("host key isn’t trusted yet");
   await changed.close();
 });
 

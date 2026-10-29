@@ -4,7 +4,7 @@ export const canOpenTerminal = error => !['unreachable','timeout'].includes(erro
 export function errorAdvice(error, host) {
   if (['unreachable','timeout'].includes(error.kind)) return 'Check the network or Tailscale connection to ' + host;
   if (error.kind === 'auth_failed') return 'Check the SSH key or agent for ' + host;
-  if (hostKeyError(error)) return "The server's host key isn't trusted yet, or it changed. Compare its fingerprint with a trusted source before approving it. A changed key must be checked with the server administrator.";
+  if (hostKeyError(error)) return "The server’s host key isn’t trusted yet, or it changed. Compare its fingerprint with a trusted source before approving it. A changed key must be checked with the server administrator.";
   if (error.kind === 'permission_denied') return 'This SSH account does not have permission for this action. Check its access on ' + host + '.';
   if (error.kind?.startsWith('sudo')) return 'This action needs administrator permission. Check the password and sudo access for this SSH account.';
   return '';

@@ -2,7 +2,7 @@ import * as backend from './backend.js';
 import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } from './state.js';
 import { initMenus } from './ui/menu.js';
 import { cancelConfirm } from './ui/confirm.js';
-import { openPalette } from './ui/palette.js';
+import { initShortcuts } from './ui/shortcuts.js';
 import { $, esc, head, agoLabel } from './ui/dom.js';
 import { errorAdvice, canOpenTerminal, hostKeyError, showError } from './ui/errors.js';
 import { parseSnapshot } from './ui/parse.js';
@@ -103,7 +103,7 @@ async function refresh(fromTimer) {
       showError(error, main, host, recover);
     } else {
       const title = document.querySelector('#nav [data-view="' + request.view + '"]')?.getAttribute('aria-label') || 'NodeScape';
-      main.innerHTML = head(esc(title), esc(host) + ' · unreachable') + '<section class="grid"><article class="card full unreachable" role="alert"><h2>Can&#39;t reach ' + esc(host) + '</h2><pre class="error">' + esc(error.message) + '</pre>' + (note ? '<p class="muted">' + esc(note) + '</p>' : '') + '<p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></article></section>';
+      main.innerHTML = head(esc(title), esc(host) + ' · unreachable') + '<section class="grid"><article class="card full unreachable" role="alert"><h2>Can’t reach ' + esc(host) + '</h2><pre class="error">' + esc(error.message) + '</pre>' + (note ? '<p class="muted">' + esc(note) + '</p>' : '') + '<p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></article></section>';
       main.querySelector('[data-retry]').onclick = () => refresh();
       main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
     }
@@ -122,7 +122,7 @@ function go(view) {
   updateNavigation(view);
   delete main.dataset.page;
   const title = document.querySelector('#nav [data-view="' + view + '"]')?.getAttribute('aria-label') || { servers: 'Manage servers', onboarding: 'Add a server' }[view];
-  main.innerHTML = state.host && !['servers', 'onboarding'].includes(view) ? head(esc(title), esc(state.host)) + '<p class="loading" role="status" aria-busy="true">Loading ' + esc(title.toLowerCase()) + '…</p>' : '';
+  main.innerHTML = state.host && !['servers', 'onboarding'].includes(view) ? head(esc(title), esc(state.host)) + '<div class="skeleton" role="status" aria-busy="true"><span class="visually-hidden">Loading ' + esc(title.toLowerCase()) + '…</span><i></i><i></i><i></i></div>' : '';
   refresh();
 }
 $('#nav').addEventListener('click', e => {
@@ -192,46 +192,6 @@ async function start() {
     main.querySelector('[data-start-retry]').onclick = start;
   }
 }
-const pages = [...document.querySelectorAll('#nav button')];
-pages.forEach((button, i) => { button.title += ' (Ctrl+' + (i + 1) + ')'; button.setAttribute('aria-keyshortcuts', 'Control+' + (i + 1)); });
-const palette = () => openPalette([
-  ...pages.filter(b => !b.disabled).map((b, i) => ({ label: 'Go to ' + b.getAttribute('aria-label'), hint: 'Ctrl+' + (i + 1), run: () => go(b.dataset.view) })),
-  ...state.profiles.filter(p => p.id !== state.profileId).map(p => ({ label: 'Switch to ' + p.name, run: () => { hostInput.value = p.id; hostInput.dispatchEvent(new Event('change')); } })),
-  { label: 'Refresh', hint: 'Ctrl+R', run: () => refresh() },
-  { label: 'Add server', run: () => go('onboarding') },
-  { label: 'Manage servers', run: () => go('servers') },
-  { label: 'Settings', run: () => $('#settingsBtn').click() },
-]);
-$('#paletteBtn').addEventListener('click', palette);
-const typing = el => el.matches('input, textarea, select, [contenteditable], .xterm *');
-document.addEventListener('keydown', e => {
-  const ctrl = e.ctrlKey || e.metaKey, open = document.querySelector('dialog[open]');
-  if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); if (!open) palette(); return; }
-  if ((ctrl && e.key.toLowerCase() === 'r') || e.key === 'F5') { e.preventDefault(); if (!open) refresh(); return; }
-  if (open) return;
-  if (ctrl && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
-    const button = pages[e.key - 1];
-    if (button && !button.disabled) { e.preventDefault(); go(button.dataset.view); }
-    return;
-  }
-  if (e.key === '/' && !ctrl && !typing(e.target)) {
-    const field = main.querySelector('#logsearch') || main.querySelector('.page-toolbar input[type=search], input[type=search]');
-    if (field) { e.preventDefault(); field.focus(); }
-    return;
-  }
-  // Up/Down between table rows, staying in the same column of controls.
-  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !ctrl && !typing(e.target)) {
-    const row = e.target.closest?.('tbody tr');
-    if (!row || e.target.closest('.row-menu')) return;
-    const controls = r => [...r.querySelectorAll('button, a[href], input')].filter(el => el.offsetParent && !el.disabled);
-    const column = controls(row).indexOf(e.target);
-    let next = row;
-    do next = e.key === 'ArrowDown' ? next.nextElementSibling : next.previousElementSibling; while (next && (next.hidden || !controls(next).length));
-    if (!next) return;
-    e.preventDefault();
-    const targets = controls(next);
-    (targets[column] || targets[0]).focus();
-  }
-});
+initShortcuts({ main, hostInput, go, refresh });
 setInterval(() => state.live && state.view === 'overview' && refresh(true), 5000);
 start();

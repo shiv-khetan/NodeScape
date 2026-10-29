@@ -98,9 +98,9 @@ test('missing memory, swap, disks and load stay unavailable', async ({ page }) =
 
 test('groups explain limited journals on Overview and Logs without hint text', async ({ page }) => {
   await open(page, section(base, 'groups', 'testuser video docker'), '2026-01-01T10:00:00+00:00 testbox app[9]: Hello');
-  await expect(card(page, 'Recent journal')).toContainText("Only this user's journal is visible");
+  await expect(card(page, 'Recent journal')).toContainText("Only this user’s journal is visible");
   await nav(page, 'Logs');
-  await expect(page.locator('.notice')).toContainText("Only this user's journal is visible");
+  await expect(page.locator('.notice')).toContainText("Only this user’s journal is visible");
   await expect(page.locator('.logrow')).toHaveCount(1);
 });
 
@@ -115,7 +115,7 @@ for (const group of ['adm', 'systemd-journal', 'root']) {
 
 test('Overview keeps hint detection when group data is absent', async ({ page }) => {
   await open(page, section(section(base, 'groups', ''), 'log', F.LOGS_LIMITED));
-  await expect(card(page, 'Recent journal')).toContainText("Only this user's journal is visible");
+  await expect(card(page, 'Recent journal')).toContainText("Only this user’s journal is visible");
   await expect(page.locator('.timeline')).not.toContainText('Hint:');
 });
 

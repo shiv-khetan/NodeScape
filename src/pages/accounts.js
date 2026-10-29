@@ -28,7 +28,7 @@ export function render(value) {
     + '<article class="card full"><div class="card-top"><div><h2>Users</h2><span class="accounts-note">Only group-based sudo is shown. Rules in sudoers are not read.</span><p id="accounts-current">SSH user: ' + esc(data.currentUser) + '</p></div><label class="accounts-check"><input id="accounts-system" type="checkbox"' + (showSystem ? ' checked' : '') + '> Show system accounts</label></div>'
     + '<table id="accounts-users" aria-label="Users"><thead><tr><th scope="col">Name / home / shell</th><th scope="col">UID</th><th scope="col">Groups</th><th scope="col">Access</th><th scope="col">Actions</th></tr></thead><tbody>' + rows + '</tbody></table><p id="accounts-empty" hidden>No users match this filter.</p></article>'
     + '<article class="card full"><div class="card-top"><h2>Groups</h2></div><table id="accounts-groups" aria-label="Groups"><thead><tr><th scope="col">Name</th><th scope="col">GID</th><th scope="col">Members (primary and supplementary)</th></tr></thead><tbody>'
-    + data.groups.map(g => '<tr><td>' + esc(g.name) + '</td><td class="num">' + esc(g.gid) + '</td><td><div class="accounts-tags">' + tags([...new Set([...g.members, ...data.users.filter(u => u.gid === g.gid).map(u => u.name)])]) + '</div></td></tr>').join('')
+    + data.groups.map(g => '<tr><td>' + esc(g.name) + '</td><td class="num">' + esc(g.gid) + '</td><td><div class="accounts-tags">' + (tags([...new Set([...g.members, ...data.users.filter(u => u.gid === g.gid).map(u => u.name)])]) || '<span class="muted">No members</span>') + '</div></td></tr>').join('')
     + '</tbody></table></article></section></div>';
 }
 

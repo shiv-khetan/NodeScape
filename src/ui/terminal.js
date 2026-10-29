@@ -10,7 +10,7 @@ export function createTerminal(onData) {
   const term = new Terminal({
     fontFamily: '"Cascadia Mono", Consolas, monospace', fontSize: 14,
     cursorBlink: true, screenReaderMode: true, scrollback: 5000,
-    theme: { background: color('--dark'), foreground: color('--on-accent'), cursor: color('--accent-soft'), selectionBackground: color('--accent-text') },
+    theme: { background: color('--terminal-bg'), foreground: color('--on-accent'), cursor: color('--accent-soft'), selectionBackground: color('--accent-text') },
   });
   const fit = new FitAddon();
   term.loadAddon(fit);

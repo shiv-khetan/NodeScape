@@ -53,7 +53,7 @@ export function render(d) {
 
     <article class="card logs">
       <div class="card-top"><h2>Recent journal</h2><button class="pill" data-go="logs">All logs ›</button></div>
-      ${d.journalLimited ? "<p class=\"notice journal-access\">Only this user's journal is visible. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</p>" : ''}
+      ${d.journalLimited ? "<p class=\"notice journal-access\">Only this user’s journal is visible. Add the user to the <code>adm</code> or <code>systemd-journal</code> group to see system logs.</p>" : ''}
       <div class="timeline">${d.log.slice(-6).map(l => {
         const e = parseLog(l);
         return `<div class="logrow ${isErr(e.msg) ? 'err' : ''}"><time>${esc(e.time)}</time><span class="tag">${esc(e.unit)}</span><span class="msg">${isErr(e.msg) ? '<b class="sev">Error</b>' : ''}${esc(e.msg)}</span></div>`;

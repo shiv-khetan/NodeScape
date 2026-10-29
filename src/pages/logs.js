@@ -7,7 +7,7 @@ export function render(txt) {
   // Keep only real entries: drops journalctl's "Hint:" notice, "-- Boot … --" separators and "-- No entries --".
   const lines = txt.split('\n').filter(l => /^\d{4}-\d\d-\d\dT/.test(l));
   const limited = journalLimited(state.snap?.groups, txt);
-  const access = state.snap?.groups?.length ? "Only this user's journal is visible" : `Only <b>${esc(host)}</b>'s own user journal is visible`;
+  const access = state.snap?.groups?.length ? "Only this user’s journal is visible" : `Only <b>${esc(host)}</b>’s own user journal is visible`;
   const errs = lines.filter(isErr).length;
   const units = [...new Set([...(state.snap?.units || []).map(u => u.unit), ...lines.map(l => parseLog(l).unit.replace(/\[\d+\]$/, ''))].filter(Boolean))].sort();
   let day = '';
