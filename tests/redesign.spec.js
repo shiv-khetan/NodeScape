@@ -102,7 +102,8 @@ for (const action of ['stop','restart','disable']) test(action + ' confirms cont
   await expect(action === 'disable' ? row.getByRole('button',{name:/More actions/}) : row.locator('[data-svc="'+action+'"]')).toBeFocused();
   if (action==='disable') await row.getByRole('button',{name:/More actions/}).click();
   await row.locator('[data-svc="'+action+'"]').click();
-  await dialog.locator('button.danger').click();
+  await expect(dialog.locator('[type=submit]')).toHaveClass(action === 'restart' ? /primary/ : /danger/);
+  await dialog.locator('[type=submit]').click();
   await expect(page.locator('#toast')).toContainText(name+' on nas-01');
   expect(await page.evaluate(() => window.__calls.filter(c=>c.cmd==='service_action').length)).toBe(1);
 });

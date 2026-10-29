@@ -22,7 +22,7 @@ export function render(txt) {
     <article class="card full"><div class="loglist">${lines.map(l => {
       const e = parseLog(l), date = l.slice(0, 10), separator = date === day ? '' : `<div class="logday" role="separator">${dayLabel(date)}</div>`;
       day = date;
-      return separator + `<div class="logrow ${isErr(l) ? 'err' : ''}"><time>${esc(e.time)}</time><span class="tag">${esc(e.unit.replace(/\[\d+\]$/, '')) || 'log'}</span><span class="msg">${esc(e.msg)}</span></div>`;
+      return separator + `<div class="logrow ${isErr(l) ? 'err' : ''}"><time>${esc(e.time)}</time><span class="tag">${esc(e.unit.replace(/\[\d+\]$/, '')) || 'log'}</span><span class="msg">${isErr(l) ? '<b class="sev">Error</b>' : ''}${esc(e.msg)}</span></div>`;
     }).join('') || '<p class="muted">No log lines.</p>'}</div></article>
   </section>`;
 }

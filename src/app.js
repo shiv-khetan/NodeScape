@@ -120,7 +120,9 @@ function go(view) {
   dispose();
   state.view = view;
   updateNavigation(view);
-  main.innerHTML = '';
+  delete main.dataset.page;
+  const title = document.querySelector('#nav [data-view="' + view + '"]')?.getAttribute('aria-label') || { servers: 'Manage servers', onboarding: 'Add a server' }[view];
+  main.innerHTML = state.host && !['servers', 'onboarding'].includes(view) ? head(esc(title), esc(state.host)) + '<p class="loading" role="status" aria-busy="true">Loading ' + esc(title.toLowerCase()) + '…</p>' : '';
   refresh();
 }
 $('#nav').addEventListener('click', e => {

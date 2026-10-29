@@ -53,25 +53,3 @@ export function dotCard(title, vals, now, cls, fmt) {
 
 
 export const collecting = n => `<p class="muted collecting">Collecting samples (${n} of 5)…</p>`;
-
-export function bars(samples) {
-  if (samples.length < 5) return collecting(samples.length);
-  const bars = [...Array(Math.max(0, 7 - samples.length)).fill(null), ...samples.slice(-7)];
-  return `<div class="bars">${bars.map((v, i) => v == null
-        ? '<div class="bar empty"><i></i></div>'
-        : `<div class="bar ${i === 6 ? 'now' : ''}"><i style="height:${Math.max(3, v)}%">${i === 6 ? `<span class="tip"><b>${v.toFixed(1)}%</b> CPU · sampled every 5s</span>` : ''}</i></div>`).join('')}
-      </div>`;
-}
-
-export function gauge(loadPct, load, cpus) {
-  if (![loadPct, load, cpus].every(Number.isFinite)) return '<p class="unavailable">Load unavailable</p>';
-  const C = 2 * Math.PI * 70;
-  return `<div class="gauge">
-        <svg viewBox="0 0 168 168">
-          <circle cx="84" cy="84" r="70" stroke="#e8ebf1" stroke-width="12"/>
-          <circle cx="84" cy="84" r="54" stroke="#c9d3e3" stroke-width="4" stroke-dasharray="1 5"/>
-          <circle cx="84" cy="84" r="70" stroke="var(--accent)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(C * loadPct) / 100} ${C}"/>
-        </svg>
-        <div class="c"><b>${loadPct}%</b><span>${load.toFixed(2)} on ${plural(cpus, 'core')}</span></div>
-      </div>`;
-}

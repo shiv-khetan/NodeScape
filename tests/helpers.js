@@ -39,7 +39,7 @@ async function clickService(page, action, unit, decision = 'accept') {
     const dialog = page.locator('.confirm-dialog');
     await expect(dialog).toContainText('Server'); await expect(dialog).toContainText('Scope');
     await expect(dialog).toContainText('Requires administrator password');
-    await dialog.locator(decision === 'cancel' ? '[data-cancel]' : 'button.danger').click();
+    await dialog.locator(decision === 'cancel' ? '[data-cancel]' : '[type=submit]').click();
   }
 }
 async function openRowMenu(row) { await row.getByRole('button', { name: /More actions/ }).click(); }

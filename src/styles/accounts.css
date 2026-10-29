@@ -1,6 +1,6 @@
 .accounts-page .accounts-tags { display:flex;flex-wrap:wrap;gap:var(--space-1); }
 .accounts-note,#accounts-current,.accounts-protected { color:var(--muted);font-size:var(--font-meta);margin:0; }
-.accounts-protected { display:block;text-align:left;line-height:var(--line-meta);padding:var(--space-2); }
+.accounts-protected { display:block;text-align:start;line-height:var(--line-meta);padding:var(--space-2); }
 .accounts-check { display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-body); }
 #accounts-users th:nth-child(1){width:28%}#accounts-users th:nth-child(2){width:8%}#accounts-users th:nth-child(3){width:26%}#accounts-users th:nth-child(4){width:18%}#accounts-users th:nth-child(5){width:20%}
 .accounts-page .who>div { display:flex;align-items:center;gap:var(--space-2); }.accounts-page .who p { flex:none; }.accounts-page .who small { min-width:0;margin:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }

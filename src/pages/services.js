@@ -90,7 +90,7 @@ export async function performServiceAction(el, action, unit, actionScope, refres
     const result = await runAction({ verb, object: unit, server,
       scope: actionScope, password: actionScope === 'system' ? 'Yes, if sudo asks for it' : 'No',
       confirm: ['stop','restart','disable'].includes(action), allowSudo: actionScope === 'system',
-      destructive: ['stop','restart','disable'].includes(action),
+      destructive: ['stop','disable'].includes(action),
       checks: lockout ? [{ id: 'lockout-ack', label: 'I have another way into ' + server, required: true }] : [],
       explanation: lockout ? "You may be connected to " + server + " through " + unit + ". " + (action === 'stop' ? "Stopping it can end NodeScape's connection" : "Disabling it means it won't start after a reboot, which can end NodeScape's connection") + ", and you may need physical access to recover. Restart is safer if you only need to reload it." : {start:'The service will start now.',enable:'The service will start automatically at boot.',stop:'The service will stop until it is started again.',restart:'The service will briefly stop while it restarts.',disable:'The service will no longer start automatically.'}[action],
       run: password => {

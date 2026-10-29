@@ -5,6 +5,6 @@
 .services .who small { margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400; }
 .services .who .service-load { flex:none; }
 .services-context { color:var(--muted);font-size:var(--font-body);margin:0; }
-.service-actions-label { text-align:right; }
+.service-actions-label { text-align:end; }
 #services-empty { padding:var(--space-4); }
 @media(max-width:1200px){.services .service-unit{width:40%}.services .service-actions{width:32%}}
