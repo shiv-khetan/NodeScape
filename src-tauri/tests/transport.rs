@@ -2,12 +2,18 @@
 #[path = "../src/contracts.rs"]
 mod contracts;
 #[allow(dead_code)]
+#[path = "../src/credentials.rs"]
+mod credentials;
+#[allow(dead_code)]
 #[path = "../src/profiles.rs"]
 mod profiles;
 #[allow(dead_code)]
 #[path = "../src/ssh_config.rs"]
 mod ssh_config;
 // The SFTP launcher is exercised by files_real.rs, not here.
+#[allow(dead_code)]
+#[path = "../src/askpass.rs"]
+mod askpass;
 #[allow(dead_code)]
 #[path = "../src/transport.rs"]
 mod transport;
@@ -26,6 +32,8 @@ fn target(host: &str) -> Target {
 fn opts() -> RunOpts {
     RunOpts {
         ssh_program: env!("CARGO_BIN_EXE_fake-ssh").into(),
+        // The fake also plays NodeScape's askpass helper, so the full prompt loop runs.
+        askpass_program: env!("CARGO_BIN_EXE_fake-ssh").into(),
         timeout: Duration::from_secs(3),
         ..RunOpts::default()
     }
@@ -530,4 +538,43 @@ fn jump_hosts_and_ports_are_validated_before_execution() {
             ErrorKind::InvalidInput
         );
     }
+}
+
+#[tokio::test]
+async fn password_logins_go_through_askpass_and_never_reach_argv_or_errors() {
+    let host = target("password-auth");
+    let no_password = run(&host, "true", opts()).await.unwrap_err();
+    assert_eq!(no_password.kind, ErrorKind::PasswordRequired);
+
+    credentials::remember_for_session(&host, "wrong pw".into()).unwrap();
+    let refused = run(&host, "true", opts()).await.unwrap_err();
+    assert_eq!(refused.kind, ErrorKind::PasswordRefused);
+    assert!(!refused.message.contains("wrong pw"));
+    // A refused password is forgotten so the next attempt asks again.
+    assert!(credentials::password(&host).is_none());
+
+    credentials::remember_for_session(&host, "right pw".into()).unwrap();
+    let ok = run(&host, "true", opts()).await.unwrap();
+    assert!(ok.contains("logged in with password"));
+    assert!(ok.contains("BatchMode=no") && ok.contains("NumberOfPasswordPrompts=1"));
+    assert!(!ok.contains("right pw"), "password must not appear in argv");
+    credentials::forget(&host);
+}
+
+#[tokio::test]
+async fn key_only_targets_keep_batch_mode_and_get_no_askpass() {
+    let out = run(&target("args"), "true", opts()).await.unwrap();
+    assert!(out.contains("BatchMode=yes"));
+    assert!(!out.contains("BatchMode=no"));
+}
+
+#[tokio::test]
+async fn diagnose_returns_the_verbose_log_and_a_typed_reason() {
+    let report = transport::diagnose(&target("verbose-refused"), opts()).await;
+    assert!(!report.ok);
+    assert_eq!(report.error.as_ref().unwrap().kind, ErrorKind::Unreachable);
+    assert!(report.log.contains("debug1: Connecting to verbose-refused"));
+    let ok = transport::diagnose(&target("verbose-ok"), opts()).await;
+    assert!(ok.ok && ok.error.is_none());
+    assert!(ok.log.contains("Authenticated to verbose-ok"));
 }

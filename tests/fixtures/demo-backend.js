@@ -273,7 +273,14 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
   }
 
   window.__TAURI__ = { core: { Channel: FakeChannel, invoke: async (cmd, args = {}) => {
-    window.__calls.push({ cmd, args: ['service_action', 'account_action'].includes(cmd) && args.password != null ? { ...args, password: '[redacted]' } : args });
+    window.__calls.push({ cmd, args: ['service_action', 'account_action'].includes(cmd) && args.password != null ? { ...args, password: '[redacted]' }
+      : cmd === 'login_password_set' ? { login: { ...args.login, password: '[redacted]' } } : args });
+    if (cmd === 'login_password_set') { const r = responses?.login_password_set; if (r?.error) throw r.error; return null; }
+    if (cmd === 'login_password_forget') return null;
+    if (cmd === 'login_password_saved') return responses?.login_password_saved ?? false;
+    if (cmd === 'connection_diagnose') return responses?.connection_diagnose ?? { ok: true, error: null, log: 'debug1: Authenticated to ' + args.target.host + ' using "publickey".' };
+    if (cmd === 'sudo_status') return responses?.sudo_status ?? 'password';
+    if (cmd === 'accounts_read' && responses && responses.accounts_read === undefined) return accountsFixture(cmd, args);
     if (/^(profiles_list|profile_save|profile_remove|environment_check|ssh_config_save|public_key_read|connection_test)$/.test(cmd) || (cmd === 'plugin:dialog|open' && args.options.title !== 'Upload file')) return onboardingFixture(cmd, args);
     if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);
     if (/^(files_|file_|transfer_|plugin:dialog\|)/.test(cmd) || cmd === 'operation_cancel') return filesFixture(cmd, args);
@@ -281,7 +288,8 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
       const supplied = responses[(args.target?.host ?? args.host) + ':' + key] ?? responses[key];
-      const value = ['service_action', 'account_action'].includes(cmd) && Array.isArray(supplied) ? supplied.shift() : supplied;
+      // A list of responses answers successive calls (the last one repeats).
+      const value = (['service_action', 'account_action'].includes(cmd) || cmd === 'query') && Array.isArray(supplied) ? (supplied.length > 1 ? supplied.shift() : supplied[0]) : supplied;
       if (value?.defer) await new Promise(resolve => window.__pending.push(resolve));
       const result = value?.defer ? value.value : value;
       if (result?.error) throw result.error;

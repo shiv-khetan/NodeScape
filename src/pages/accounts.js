@@ -1,4 +1,5 @@
 import { accountsRead, accountAction } from '../backend.js';
+import { adminRow, fillAdminNote } from '../ui/admin.js';
 import { state, currentTarget, requestContext, isCurrent } from '../state.js';
 import { runAction } from '../ui/confirm.js';
 import { rowMenu } from '../ui/menu.js';
@@ -25,7 +26,7 @@ export function render(value) {
   }).join('');
   return '<div class="accounts-page">' + head('Users', esc(currentTarget().host)+' · '+plural(data.users.length,'user')+' · '+plural(data.groups.length,'group'), search('accounts-filter','Filter users',filter) + segTabs('account-filter',accountFilter,[['all','All '+data.users.length],['login','Login users '+data.users.filter(u=>u.login).length],['sudo','Sudo users '+data.users.filter(sudo).length]]), '', '<button class="pill primary" id="add-account">Add user</button>')
     + '<section class="grid">'
-    + '<article class="card full"><div class="card-top"><div><h2>Users</h2><span class="accounts-note">Only group-based sudo is shown. Rules in sudoers are not read.</span><p id="accounts-current">SSH user: ' + esc(data.currentUser) + '</p></div><label class="accounts-check"><input id="accounts-system" type="checkbox"' + (showSystem ? ' checked' : '') + '> Show system accounts</label></div>'
+    + '<article class="card full"><div class="card-top"><div><h2>Users</h2><span class="accounts-note">Only group-based sudo is shown. Rules in sudoers are not read.</span><span class="admin-note accounts-note"></span><p id="accounts-current">SSH user: ' + esc(data.currentUser) + '</p></div><label class="accounts-check"><input id="accounts-system" type="checkbox"' + (showSystem ? ' checked' : '') + '> Show system accounts</label></div>'
     + '<table id="accounts-users" aria-label="Users"><thead><tr><th scope="col">Name / home / shell</th><th scope="col">UID</th><th scope="col">Groups</th><th scope="col">Access</th><th scope="col">Actions</th></tr></thead><tbody>' + rows + '</tbody></table><p id="accounts-empty" hidden>No users match this filter.</p></article>'
     + '<article class="card full"><div class="card-top"><h2>Groups</h2></div><table id="accounts-groups" aria-label="Groups"><thead><tr><th scope="col">Name</th><th scope="col">GID</th><th scope="col">Members (primary and supplementary)</th></tr></thead><tbody>'
     + data.groups.map(g => '<tr><td>' + esc(g.name) + '</td><td class="num">' + esc(g.gid) + '</td><td><div class="accounts-tags">' + (tags([...new Set([...g.members, ...data.users.filter(u => u.gid === g.gid).map(u => u.name)])]) || '<span class="muted">No members</span>') + '</div></td></tr>').join('')
@@ -61,6 +62,7 @@ function showDialog(title, fields, submit, onSubmit) {
 const validName = name => /^[a-z_][a-z0-9_-]{0,31}$/.test(name);
 
 export function mount(el, { refresh }) {
+  fillAdminNote(el, currentTarget());
   events = new AbortController();
   let busy = false;
   const pageRequest = requestContext();
@@ -80,7 +82,7 @@ export function mount(el, { refresh }) {
     buttons.forEach(b => { b.disabled = true; });
     try {
       const result = await runAction({ verb:{create_user:'Create user',delete_user:'Delete '+args.name,add_to_group:'Add group',remove_from_group:'Remove group'}[action],
-        object:'', server:state.profiles.find(p=>p.id===state.profileId)?.name || target.host, scope:'User account', confirm:false, ...confirmation,
+        object:'', server:state.profiles.find(p=>p.id===state.profileId)?.name || target.host, scope:'User account', password:adminRow(target), confirm:false, ...confirmation,
         run: (password, checks = {}) => {
           if (!isCurrent(request)) throw { kind:'cancelled', message:'Action cancelled' };
           return accountAction(target, action, action === 'delete_user' ? {...args,removeHome:checks['account-remove-home'] === true} : args, password);

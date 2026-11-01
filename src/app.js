@@ -4,7 +4,8 @@ import { initMenus } from './ui/menu.js';
 import { cancelConfirm } from './ui/confirm.js';
 import { initShortcuts } from './ui/shortcuts.js';
 import { $, esc, head, agoLabel } from './ui/dom.js';
-import { errorAdvice, canOpenTerminal, hostKeyError, showError } from './ui/errors.js';
+import { showError, passwordError, renderUnreachable, markStale } from './ui/errors.js';
+import { askLoginPassword } from './ui/connect.js';
 import { parseSnapshot } from './ui/parse.js';
 import * as overview from './pages/overview.js';
 import * as services from './pages/services.js';
@@ -47,8 +48,7 @@ function updateNavigation(view) {
     if (selected) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
   });
 }
-let mounted;
-const lastReached = {};
+let mounted; const lastReached = {};
 function dispose() { cancelConfirm(); mounted?.dispose?.(); mounted = null; }
 
 async function refresh(fromTimer) {
@@ -85,8 +85,15 @@ async function refresh(fromTimer) {
     if (focused) main.querySelector('#' + focused)?.focus();
   } catch (error) {
     if (!isCurrent(request)) return;
-    dispose();
     const host = request.target.host;
+    const server = state.profiles.find(p => p.id === state.profileId)?.name || host;
+    // A server that wants a password asks for it here, then the same page loads again.
+    if (passwordError(error) && await askLoginPassword({ server, target: request.target, refused: error.kind === 'password_refused' })) {
+      if (isCurrent(request)) refresh();
+      return;
+    }
+    if (!isCurrent(request)) return;
+    dispose();
     const note = lastReached[host] ? 'Last reached ' + agoLabel(Math.round((Date.now() - lastReached[host]) / 1000)) : '';
     const recover = { note, retry: () => refresh() };
     if (request.view === 'overview' && state.snap) {
@@ -96,16 +103,11 @@ async function refresh(fromTimer) {
       overview.mount(main, { refresh, go, profilesChanged });
       showError(error, main, host, recover);
     } else if (main.dataset.page === request.view && main.querySelector('.page-head')) {
-      // Keep what this page last showed, dimmed and inert, under the error band.
-      main.querySelectorAll('.page-head ~ *').forEach(node => { node.inert = true; node.classList.add('stale'); });
-      const meta = main.querySelector('.page-meta');
-      if (meta && !/unreachable/.test(meta.textContent)) meta.append(' · unreachable');
+      markStale(main);
       showError(error, main, host, recover);
     } else {
-      const title = document.querySelector('#nav [data-view="' + request.view + '"]')?.getAttribute('aria-label') || 'NodeScape';
-      main.innerHTML = head(esc(title), esc(host) + ' · unreachable') + '<section class="grid"><article class="card full unreachable" role="alert"><h2>Can’t reach ' + esc(host) + '</h2><pre class="error">' + esc(error.message) + '</pre>' + (note ? '<p class="muted">' + esc(note) + '</p>' : '') + '<p>' + esc(errorAdvice(error, host) || 'Check that ssh ' + host + ' works in a terminal without a password prompt.') + '</p><div class="dlg-actions"><button class="primary" data-retry>Retry</button><button data-edit-server>Edit server</button>' + (hostKeyError(error) ? '<button data-approve-host>Approve host key</button>' : '') + (canOpenTerminal(error) ? '<button data-go="terminal">Open terminal</button>' : '') + '</div></article></section>';
-      main.querySelector('[data-retry]').onclick = () => refresh();
-      main.querySelector('[data-edit-server]').onclick = () => { state.editServer = state.profileId; go('servers'); };
+      renderUnreachable(main, { title: document.querySelector('#nav [data-view="' + request.view + '"]')?.getAttribute('aria-label') || 'NodeScape', host, server, error, note, target: request.target,
+        retry: () => refresh(), editServer: () => { state.editServer = state.profileId; go('servers'); } });
     }
 
   } finally {

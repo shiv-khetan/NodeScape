@@ -2,6 +2,7 @@ import * as backend from '../backend.js';
 import { state } from '../state.js';
 import { esc, head } from '../ui/dom.js';
 import { createTerminal } from '../ui/terminal.js';
+import { errorAdvice, passwordError, showDetails } from '../ui/errors.js';
 
 let current;
 const steps = ['Environment', 'Server', 'Trust', 'Public key', 'Connection'];
@@ -15,7 +16,7 @@ function report(s, error) {
 }
 function clearError(s) { s.el.querySelector('[data-onboarding-error]').textContent = ''; }
 function capture(s) {
-  for (const id of ['name','config','alias','hostname','user','port','identity','publicPath']) {
+  for (const id of ['name','config','alias','hostname','user','port','identity','publicPath','jump']) {
     const input = s.el.querySelector('#setup-'+id); if (input) s[id] = input.value;
   }
 }
@@ -31,11 +32,15 @@ function draw(s) {
   } else if (s.step === 1) {
     panel.innerHTML = '<h2>Choose how to connect</h2><p>Use an alias you already have, or create a server in NodeScape’s own SSH config.</p><div class="segtabs" role="group" aria-label="Connection method"><button type="button" data-action="existing" class="'+(s.mode==='existing'?'on':'')+'">Existing SSH config</button><button type="button" data-action="new" class="'+(s.mode==='new'?'on':'')+'">New server</button></div><form data-details><div class="setup-fields"><div>'+field('setup-name','Server name',s.name,'required maxlength="120"')+'</div>'+(s.mode==='existing' ?
       '<div>'+field('setup-config','SSH config file',s.config,'placeholder="Blank uses ~/.ssh/config"')+button('Choose config','config')+'</div><div><label for="setup-alias">SSH alias</label><select class="field" id="setup-alias" required><option value="">Choose an alias</option>'+s.aliases.map(a=>'<option value="'+esc(a)+'" '+(a===s.alias?'selected':'')+'>'+esc(a)+'</option>').join('')+'</select></div>' :
-      '<div>'+field('setup-alias','Alias',s.alias,'required placeholder="workshop"')+'</div><div>'+field('setup-hostname','Hostname',s.hostname,'required placeholder="box.example"')+'</div><div>'+field('setup-user','SSH user',s.user,'required autocomplete="off"')+'</div><div>'+field('setup-port','Port',s.port,'required type="number" min="1" max="65535"')+'</div><div class="setup-wide">'+field('setup-identity','Identity file',s.identity,'required placeholder="Absolute path to a private key"')+'<div class="setup-actions">'+button('Choose existing key','identity')+button('New key path','new-path')+button('Generate key','keygen')+'</div><p>To generate a key, choose a new file path. Enter its passphrase only in the terminal below.</p></div>')+'</div><div data-setup-terminal></div><div class="setup-actions">'+button('Back','back')+'<button class="pill primary" type="submit" '+(s.generating?'disabled':'')+'>Continue</button></div></form>';
+      '<div>'+field('setup-alias','Alias',s.alias,'required placeholder="workshop"')+'</div><div>'+field('setup-hostname','Hostname or IP address',s.hostname,'required placeholder="box.example or 192.0.2.10"')+'</div><div>'+field('setup-user','SSH user',s.user,'required autocomplete="off"')+'</div><div>'+field('setup-port','Port',s.port,'required type="number" min="1" max="65535"')+'</div>'
+      +'<div class="setup-wide"><span class="field-label" id="auth-label">Authentication</span><div class="segtabs" role="group" aria-label="Authentication">'+['key','password'].map(a=>'<button type="button" data-action="auth-'+a+'" class="'+(s.auth===a?'on':'')+'" aria-pressed="'+(s.auth===a)+'">'+(a==='key'?'SSH key':'Password')+'</button>').join('')+'</div></div>'
+      +(s.auth==='key' ? '<div class="setup-wide">'+field('setup-identity','Identity file',s.identity,'required placeholder="Absolute path to a private key"')+'<div class="setup-actions">'+button('Choose existing key','identity')+button('New key path','new-path')+button('Generate key','keygen')+'</div><p>To generate a key, choose a new file path. Enter its passphrase only in the terminal below.</p></div>'
+        : '<p class="setup-wide">You type the password when you connect. NodeScape can remember it, encrypted in Windows Credential Manager for your Windows account. It is never written to the SSH config.</p>')
+      +'<details class="setup-wide setup-advanced"'+(s.jump?' open':'')+'><summary>Advanced</summary>'+field('setup-jump','Jump host',s.jump,'placeholder="user@bastion.example:22 (optional, one hop)"')+'</details>')+'</div><div data-setup-terminal></div><div class="setup-actions">'+button('Back','back')+'<button class="pill primary" type="submit" '+(s.generating?'disabled':'')+'>Continue</button></div></form>';
     panel.querySelector('[data-details]').onsubmit = async event => {
       event.preventDefault(); capture(s); await attempt(s, async () => {
         if (s.mode === 'existing') { if (!s.alias) throw {kind:'invalid_input',message:'Choose an SSH alias'}; s.target = {host:s.alias,config:s.config || null}; }
-        else s.target = await backend.sshConfigSave({alias:s.alias,hostname:s.hostname,user:s.user,port:Number(s.port),identityFile:s.identity});
+        else s.target = await backend.sshConfigSave({alias:s.alias,hostname:s.hostname,user:s.user,port:Number(s.port),auth:s.auth,identityFile:s.auth==='key'?s.identity:null,jump:s.jump.trim()||null});
         if (s.disposed) return;
         s.publicPath = s.identity ? s.identity+'.pub' : ''; s.step=2; draw(s); await setupTerminal(s,'trust_host',{});
       });
@@ -46,7 +51,11 @@ function draw(s) {
   } else if (s.step === 3) {
     panel.innerHTML = '<h2>Install a public key (optional)</h2><p>If this server already accepts your key, skip this step. Otherwise choose the matching .pub file and enter the server account password in OpenSSH’s terminal. NodeScape appends the public key only if it is absent.</p><div class="setup-fields"><div class="setup-wide">'+field('setup-publicPath','Public key file',s.publicPath,'placeholder="Absolute path ending in .pub"')+button('Choose public key','public-path')+'</div></div><div class="setup-actions">'+button('Install public key','install')+'</div><div data-setup-terminal></div><div class="setup-actions">'+button('Back','back')+button('Skip key installation','skip')+'<button class="pill primary" data-action="next" '+(!s.installed?'disabled':'')+'>Continue</button></div>';
   } else {
-    panel.innerHTML = '<h2>Test your connection</h2><p>Check key authentication with strict host key verification. You can save the server after this succeeds.</p><p><b>'+esc(s.name)+'</b> · '+esc(s.target.host)+'</p><p data-test-status role="status">'+(s.tested?'Connection successful.':'Ready to test.')+'</p><div class="setup-actions">'+button('Back','back')+button('Test connection','test')+'<button class="pill primary" data-action="save" '+(!s.tested?'disabled':'')+'>Save server</button></div>';
+    const askPassword = !s.tested && (s.auth === 'password' || s.needsPassword);
+    const who = s.mode === 'new' ? s.user + '@' + s.hostname : s.target.host;
+    panel.innerHTML = '<h2>Test your connection</h2><p>Check the login with strict host key verification. You can save the server after this succeeds.</p><p><b>'+esc(s.name)+'</b> · '+esc(s.target.host)+'</p>'
+      +(askPassword ? '<div class="setup-fields"><div class="setup-wide"><label for="setup-login">Password for '+esc(who)+'</label><input class="field" id="setup-login" type="password" autocomplete="off" spellcheck="false"><label class="confirm-check"><input type="checkbox" id="setup-remember" checked>Remember on this computer (encrypted in Windows Credential Manager)</label></div></div>' : '')
+      +'<p data-test-status role="status">'+esc(s.testStatus || (s.tested?'Connection successful.':'Ready to test.'))+'</p><div class="setup-actions">'+button('Back','back')+button('Test connection','test')+(s.testFailed ? button('Show details','details') : '')+'<button class="pill primary" data-action="save" '+(!s.tested?'disabled':'')+'>Save server</button></div><div data-test-details></div>';
   }
   panel.querySelector('[data-details]')?.addEventListener('input', () => capture(s));
   panel.onclick = event => {
@@ -75,9 +84,11 @@ async function loadAliases(s) {
 }
 async function act(s,action) {
   if(action==='check') { s.environment=await backend.environmentCheck(); draw(s); }
-  if(action==='next' || action==='skip') { s.step++; s.tested=false; draw(s); if(s.step===1) loadAliases(s); }
-  if(action==='back') { s.step--; s.tested=false; s.installed=false; draw(s); if(s.step===1 && s.mode==='existing') loadAliases(s); }
+  if(action==='next' || action==='skip') { s.step++; s.tested=false; s.testFailed=false; s.testStatus=''; draw(s); if(s.step===1) loadAliases(s); }
+  if(action==='back') { s.step--; s.tested=false; s.installed=false; s.testFailed=false; s.testStatus=''; draw(s); if(s.step===1 && s.mode==='existing') loadAliases(s); }
   if(action==='existing' || action==='new') { s.mode=action; draw(s); if(action==='existing') loadAliases(s); }
+  if(action==='auth-key' || action==='auth-password') { s.auth=action.slice(5); draw(s); }
+  if(action==='details') await showDetails(s.el.querySelector('[data-test-details]'), s.target);
   if(action==='config') { const path=await backend.pickConfig(); if(path){s.config=path;s.alias=''; await loadAliases(s);} }
   if(action==='identity' || action==='new-path') { const path=await (action==='identity'?backend.pickIdentity():backend.pickNewIdentity()); if(path){s.identity=path;s.keygenFailed=false;draw(s);} }
   if(action==='public-path') { const path=await backend.pickIdentity(); if(path){s.publicPath=path;draw(s);} }
@@ -89,10 +100,25 @@ async function act(s,action) {
     await setupTerminal(s,'install_key',{publicKey:key},code=>{s.installed=code===0; const next=s.el.querySelector('[data-action="next"]'); if(next) next.disabled=!s.installed;});
   }
   if(action==='test') {
-    s.tested=false; s.operationId='onboarding-'+crypto.randomUUID();
+    const field=s.el.querySelector('#setup-login');
+    let password=field?.value || '';
+    if(field) field.value='';
+    if(field && !password) throw {kind:'invalid_input',message:'Enter the password for this server'};
+    s.tested=false; s.testFailed=false; s.testStatus=''; s.operationId='onboarding-'+crypto.randomUUID();
     s.el.querySelector('[data-test-status]').textContent='Testing…';
-    try { await backend.connectionTest(s.target,s.operationId); if(s.disposed)return; s.tested=true; draw(s); }
-    finally { s.operationId=null; if(!s.tested && !s.disposed) s.el.querySelector('[data-test-status]').textContent='Connection did not succeed. Check the error and try again.'; }
+    try {
+      if(password) { await backend.loginPasswordSet(s.target,password,s.el.querySelector('#setup-remember').checked); password=''; }
+      await backend.connectionTest(s.target,s.operationId); if(s.disposed)return; s.tested=true; s.needsPassword=false; draw(s);
+    } catch(error) {
+      password='';
+      if(!s.disposed) {
+        // Name the reason in plain words, offer the ssh log, and ask for a password when the server wants one.
+        if(passwordError(error)) s.needsPassword=true;
+        s.testFailed=true; s.testStatus=errorAdvice(error,s.target.host) || 'Connection did not succeed. Check the error and try again.';
+        draw(s);
+      }
+      throw error;
+    } finally { s.operationId=null; }
   }
   if(action==='save' && s.tested) { const profile=await backend.profileSave({id:s.profileId || '',name:s.name,host:s.target.host,config:s.target.config}); if(!s.disposed) await s.context.profilesChanged(profile,true); }
 }
@@ -119,7 +145,7 @@ async function setupTerminal(s,kind,args,done=()=>{}) {
   } catch(error) { done(null); throw error; }
 }
 export function mount(el,context) {
-  const s=current={el,context,step:0,mode:'existing',name:'',config:state.defaultConfig || '',alias:'',aliases:[],aliasEpoch:0,hostname:'',user:'',port:'22',identity:'',publicPath:'',environment:null,tested:false,disposed:false,pending:false};
+  const s=current={el,context,step:0,mode:'existing',auth:'key',jump:'',needsPassword:false,testFailed:false,testStatus:'',name:'',config:state.defaultConfig || '',alias:'',aliases:[],aliasEpoch:0,hostname:'',user:'',port:'22',identity:'',publicPath:'',environment:null,tested:false,disposed:false,pending:false};
   const profile = state.trustProfile; state.trustProfile = null;
   if (profile) {
     Object.assign(s, { step:2, name:profile.name, alias:profile.host, config:profile.config || '', target:{host:profile.host,config:profile.config}, profileId:profile.id });

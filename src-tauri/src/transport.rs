@@ -1,7 +1,8 @@
 use crate::contracts::{
-    classify_ssh_failure, classify_ssh_failure_redacted, redact_text, valid_host, AppError,
-    ErrorKind, Target,
+    auth_kind, classify_ssh_failure, classify_ssh_failure_redacted, redact_text, valid_host,
+    AppError, ErrorKind, Target,
 };
+use crate::credentials;
 use std::{
     collections::HashMap,
     io,
@@ -33,6 +34,10 @@ pub struct RunOpts {
     pub known_hosts_file: Option<PathBuf>,
     /// Secret removed from output before any remote diagnostic becomes an AppError.
     pub(crate) redact: Option<Zeroizing<String>>,
+    /// Program ssh runs as SSH_ASKPASS for password logins: NodeScape itself (see askpass.rs).
+    pub askpass_program: PathBuf,
+    /// Run `ssh -v` and copy the redacted client log here, for connection diagnostics.
+    pub(crate) diagnostics: Option<std::sync::Arc<Mutex<String>>>,
 }
 
 impl Default for RunOpts {
@@ -44,6 +49,8 @@ impl Default for RunOpts {
             ssh_program: ssh_program(),
             known_hosts_file: None,
             redact: None,
+            askpass_program: std::env::current_exe().unwrap_or_else(|_| "nodescape".into()),
+            diagnostics: None,
         }
     }
 }
@@ -73,6 +80,57 @@ const OPTIONS: &[&str] = &[
     "ControlPath=none",
     "ControlPersist=no",
 ];
+
+/// With a saved login password, ssh may prompt once and asks NodeScape (askpass) for the answer.
+fn connection_options(password: bool) -> impl Iterator<Item = &'static str> {
+    OPTIONS
+        .iter()
+        .map(move |option| match *option {
+            "BatchMode=yes" if password => "BatchMode=no",
+            other => other,
+        })
+        .chain(password.then_some("NumberOfPasswordPrompts=1"))
+}
+
+/// The password only ever travels in the ssh child's environment, never in argv or on disk.
+fn askpass_env(command: &mut Command, opts: &RunOpts, password: &str) {
+    command
+        .env("SSH_ASKPASS", &opts.askpass_program)
+        .env("SSH_ASKPASS_REQUIRE", "force")
+        .env(crate::askpass::SECRET_ENV, password);
+}
+
+/// "Permission denied" from a server that accepts passwords means "ask for one" or "that one was wrong".
+fn refine_auth(mut error: AppError, target: &Target, text: &str, used_password: bool) -> AppError {
+    if error.kind == ErrorKind::AuthFailed {
+        if let Some(kind) = auth_kind(text, used_password) {
+            error.kind = kind;
+            if used_password {
+                credentials::forget(target);
+            }
+        }
+    }
+    error
+}
+
+#[derive(serde::Serialize)]
+pub struct Diagnosis {
+    pub ok: bool,
+    pub error: Option<AppError>,
+    pub log: String,
+}
+
+/// Connect with `ssh -v`, run nothing but `exit`, and return the typed outcome with the client log.
+pub async fn diagnose(target: &Target, mut opts: RunOpts) -> Diagnosis {
+    let sink = std::sync::Arc::new(Mutex::new(String::new()));
+    opts.diagnostics = Some(sink.clone());
+    let result = run(target, "exit 0\n", opts).await;
+    let log = std::mem::take(&mut *sink.lock().unwrap_or_else(|e| e.into_inner()));
+    match result {
+        Ok(_) => Diagnosis { ok: true, error: None, log },
+        Err(error) => Diagnosis { ok: false, error: Some(error), log },
+    }
+}
 
 type Operations = Mutex<HashMap<String, watch::Sender<bool>>>;
 
@@ -372,8 +430,16 @@ async fn invoke(
         command.arg("-F").arg(config);
     }
     command.arg("-T");
-    for option in OPTIONS {
+    // `ssh -G` only reads config, so it never needs the login password.
+    let password = script.and(credentials::password(target));
+    if let Some(password) = &password {
+        askpass_env(&mut command, opts, password);
+    }
+    for option in connection_options(password.is_some()) {
         command.arg("-o").arg(option);
+    }
+    if opts.diagnostics.is_some() && script.is_some() {
+        command.arg("-v");
     }
     if let Some(path) = &opts.known_hosts_file {
         command.arg("-o").arg(known_hosts_option(path)?);
@@ -435,15 +501,21 @@ async fn invoke(
     match result {
         Ok((stdout, stderr, written, status)) => {
             let secret = opts.redact.as_ref().map(|secret| secret.as_str());
-            let stdout = Zeroizing::new(String::from_utf8_lossy(&stdout).into_owned());
-            let stderr = Zeroizing::new(String::from_utf8_lossy(&stderr).into_owned());
+            let login = password.as_ref().map(|p| p.as_str());
+            let stdout = redact_text(&String::from_utf8_lossy(&stdout), login);
+            let stderr = redact_text(&String::from_utf8_lossy(&stderr), login);
+            if let Some(sink) = &opts.diagnostics {
+                let log = redact_text(&stderr, secret);
+                *sink.lock().unwrap_or_else(|e| e.into_inner()) = log.chars().take(64 * 1024).collect();
+            }
             if !status.success() {
-                return Err(match secret {
+                let error = match secret {
                     Some(secret) => {
                         classify_ssh_failure_redacted(&stderr, &stdout, status.code(), Some(secret))
                     }
                     None => classify_ssh_failure(&stderr, &stdout, status.code()),
-                });
+                };
+                return Err(refine_auth(error, target, &stderr, login.is_some()));
             }
             written.map_err(local_error)?;
             let mut stdout = redact_text(&stdout, secret);
@@ -534,9 +606,13 @@ pub async fn spawn_subsystem(
         command.arg("-F").arg(config);
     }
     command.arg("-T");
-    for option in OPTIONS {
+    let password = credentials::password(target);
+    if let Some(password) = &password {
+        askpass_env(&mut command, &opts, password);
+    }
+    for option in connection_options(password.is_some()) {
         // OpenSSH rejects `-s` together with SessionType, so request the subsystem through it.
-        let option = if *option == "SessionType=default" {
+        let option = if option == "SessionType=default" {
             "SessionType=subsystem"
         } else {
             option

@@ -28,7 +28,22 @@ pub struct ManagedServer {
     pub hostname: String,
     pub user: String,
     pub port: u32,
-    pub identity_file: String,
+    #[serde(default)]
+    pub identity_file: Option<String>,
+    #[serde(default)]
+    pub auth: Auth,
+    /// One jump host, `[user@]host[:port]`, written as ProxyJump.
+    #[serde(default)]
+    pub jump: Option<String>,
+}
+
+#[derive(Deserialize, Default, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub enum Auth {
+    #[default]
+    Key,
+    /// The password is typed at connect time (and optionally saved encrypted), never written here.
+    Password,
 }
 fn invalid(message: &str) -> AppError {
     AppError::new(ErrorKind::InvalidInput, message)
@@ -56,15 +71,34 @@ fn render_block(server: &ManagedServer) -> Result<String, AppError> {
     if !(1..=65535).contains(&server.port) {
         return Err(invalid("Port must be 1–65535"));
     }
-    if !valid_local_path(&server.identity_file)
-        || server.identity_file.contains(['%', '$', '"'])
-        || !Path::new(&server.identity_file).is_absolute()
-        || !Path::new(&server.identity_file).is_file()
-    {
-        return Err(invalid("Choose an existing identity file with an absolute path (no percent, dollar or quote characters)"));
+    let mut block = format!(
+        "Host {}\n  HostName {}\n  User {}\n  Port {}\n",
+        server.alias, server.hostname, server.user, server.port
+    );
+    match server.auth {
+        Auth::Key => {
+            let identity = server.identity_file.as_deref().unwrap_or("");
+            if !valid_local_path(identity)
+                || identity.contains(['%', '$', '"'])
+                || !Path::new(identity).is_absolute()
+                || !Path::new(identity).is_file()
+            {
+                return Err(invalid("Choose an existing identity file with an absolute path (no percent, dollar or quote characters)"));
+            }
+            block += &format!("  IdentityFile \"{}\"\n  IdentitiesOnly yes\n", identity.replace('\\', "/"));
+        }
+        Auth::Password => {
+            block += "  PreferredAuthentications password,keyboard-interactive\n  PubkeyAuthentication no\n";
+        }
     }
-    let identity = server.identity_file.replace('\\', "/");
-    Ok(format!("Host {}\n  HostName {}\n  User {}\n  Port {}\n  IdentityFile \"{}\"\n  IdentitiesOnly yes\n", server.alias, server.hostname, server.user, server.port, identity))
+    if let Some(jump) = server.jump.as_deref().map(str::trim).filter(|j| !j.is_empty()) {
+        // One hop only; the transport re-validates it before every connection.
+        if jump.contains(',') || !token(jump, "._-@:[]") {
+            return Err(invalid("Invalid jump host. Use [user@]host[:port] (one hop)."));
+        }
+        block += &format!("  ProxyJump {jump}\n");
+    }
+    Ok(block)
 }
 fn write_managed(path: &Path, server: &ManagedServer) -> Result<(), AppError> {
     static WRITES: Mutex<()> = Mutex::new(());
@@ -107,8 +141,34 @@ mod managed_tests {
             hostname: "box.example".into(),
             user: "operator".into(),
             port: 22,
-            identity_file: path,
+            identity_file: Some(path),
+            auth: Auth::Key,
+            jump: None,
         }
+    }
+    #[test]
+    fn password_servers_need_no_key_and_never_write_a_secret() {
+        let mut s = server(String::new());
+        assert!(render_block(&s).is_err(), "key auth still needs an identity file");
+        s.auth = Auth::Password;
+        s.identity_file = None;
+        let block = render_block(&s).unwrap();
+        assert!(block.contains("PreferredAuthentications password,keyboard-interactive\n"));
+        assert!(block.contains("PubkeyAuthentication no\n"));
+        assert!(!block.contains("IdentityFile"));
+    }
+    #[test]
+    fn jump_hosts_are_one_validated_hop() {
+        let mut s = server(String::new());
+        s.auth = Auth::Password;
+        s.jump = Some("admin@bastion.example:2222".into());
+        assert!(render_block(&s).unwrap().contains("  ProxyJump admin@bastion.example:2222\n"));
+        for bad in ["a,b", "-oProxyCommand=x", "bastion;id", "bastion\nHost evil", "bas tion"] {
+            s.jump = Some(bad.into());
+            assert!(render_block(&s).is_err(), "{bad}");
+        }
+        s.jump = Some("  ".into());
+        assert!(!render_block(&s).unwrap().contains("ProxyJump"));
     }
     #[test]
     fn validates_every_field_and_quotes_identity_paths() {

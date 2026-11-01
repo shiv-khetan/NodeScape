@@ -28,9 +28,25 @@ Messages are capped at 4000 characters. Kinds:
 | outcome_unknown | A mutation may have completed before contact was lost. |
 | remote | An unclassified remote failure; preserve its message. |
 | internal | A local unexpected failure occurred. |
+| password_required | The server accepts password login and none is held for this target. |
+| password_refused | The server refused the held password; it has been forgotten. |
+| connection_closed | The server closed or reset the connection (limits, fail2ban, sshd restart). |
 
 Events use `area:event` names and carry the target host and an operation
 or session id. Streams use `tauri::ipc::Channel`.
 No command may run arbitrary shell text except the interactive terminal.
 All input is validated in Rust even when the UI has already validated it.
 Mutations are never retried automatically.
+
+## Login passwords and diagnostics
+
+| Command | Arguments | Returns |
+| --- | --- | --- |
+| login_password_set | `login: { target, password, remember }` | `null`. Holds the password for the session; `remember` also saves it in Windows Credential Manager (Local persistence). |
+| login_password_forget | `target` | `null`. Removes the session and saved copies. |
+| login_password_saved | `target` | `boolean`. Never returns the password. |
+| connection_diagnose | `target` | `{ ok, error, log }`: runs `ssh -v … exit`; `log` is the redacted client log. |
+| sudo_status | `target` | `"passwordless" \| "password" \| "none" \| "missing"`. |
+
+`ssh_config_save` takes `server: { alias, hostname, user, port, auth: "key" | "password", identityFile: string | null, jump: string | null }`.
+Password servers get `PreferredAuthentications password,keyboard-interactive` and `PubkeyAuthentication no`; the password is never written to the config.

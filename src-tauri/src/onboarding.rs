@@ -155,6 +155,12 @@ pub async fn connection_test(target: Target, operation_id: Option<String>) -> Re
     .map(|_| ())
 }
 
+/// `ssh -v` connection check: the typed reason plus the redacted client log, for "Show details".
+#[tauri::command]
+pub async fn connection_diagnose(target: Target) -> transport::Diagnosis {
+    transport::diagnose(&target, transport::RunOpts::default()).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

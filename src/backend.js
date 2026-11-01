@@ -67,6 +67,12 @@ export const environmentCheck = () => invoke('environment_check');
 export const sshConfigSave = server => invoke('ssh_config_save', { server });
 export const publicKeyRead = path => invoke('public_key_read', { path });
 export const connectionTest = (target, operationId) => invoke('connection_test', { target, operationId });
+export const connectionDiagnose = target => invoke('connection_diagnose', { target });
+// The password goes to the backend once; it is held there (and in Credential Manager when remembered), never returned.
+export const loginPasswordSet = (target, password, remember) => invoke('login_password_set', { login: { target, password, remember } });
+export const loginPasswordForget = target => invoke('login_password_forget', { target });
+export const loginPasswordSaved = target => invoke('login_password_saved', { target });
+export const sudoStatus = target => invoke('sudo_status', { target });
 export const terminalOpenKind = (target, kind, args, cols, rows, channel) => invoke('terminal_open_kind', { target, kind, args, cols, rows, channel });
 export const pickConfig = () => invoke('plugin:dialog|open', { options: { title: 'Choose SSH config', multiple: false, directory: false } });
 export const pickIdentity = () => invoke('plugin:dialog|open', { options: { title: 'Choose identity file', multiple: false, directory: false } });

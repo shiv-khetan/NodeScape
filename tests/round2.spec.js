@@ -166,7 +166,7 @@ test('confirmed actions expand the same dialog for one-use sudo and wrong passwo
   await open(page,{host:'testbox',responses:{snapshot:F.SNAPSHOT,service_action:[{error:{kind:'sudo_required',message:'Password required'}},{error:{kind:'sudo_wrong_password',message:'Wrong'}},'ok']}});
   await nav(page,'Services');await page.locator('[data-svc="stop"][data-u="nginx.service"]').click();
   const dialog=page.locator('.confirm-dialog');await dialog.evaluate(e=>window.__originalConfirm=e);
-  await expect(dialog).toContainText('Yes, if sudo asks for it');await expect(dialog).not.toContainText(/maybe/i);
+  await expect(dialog.locator('.confirm-context')).toContainText('Requires administrator passwordYes');await expect(dialog).not.toContainText(/maybe/i);
   await dialog.getByRole('button',{name:'Stop nginx.service',exact:true}).click();
   expect(await dialog.evaluate(e=>e===window.__originalConfirm)).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(1);

@@ -1,4 +1,5 @@
 import { state, currentTarget, requestContext, isCurrent } from '../state.js';
+import { adminRow, fillAdminNote } from '../ui/admin.js';
 import { serviceAction } from '../backend.js';
 import { runAction } from '../ui/confirm.js';
 import { rowMenu } from '../ui/menu.js';
@@ -24,7 +25,7 @@ export function render(d) {
   }).join('');
   const available = scope === 'system' || selected.available;
   const counts = segTabs('state', svcState, [['all', 'All '+units.length], ['running', 'Running '+n('running')], ['failed', 'Failed '+n('failed')], ['inactive', 'Inactive '+n('inactive')]]).replace('data-state="failed" class="','data-state="failed" class="'+(n('failed') ? 'has-errors ' : ''));
-  return head('Services', `${esc(state.host)} · systemd · ${plural(units.length, 'unit')}`, search('filter','Search services',svcFilter), counts + segTabs('scope',scope,[['system','System'],['user','User']])) + `<section class="grid services">${available ? `<article class="card full"><div class="card-top"><h2>Units</h2><span class="muted">${scope === 'system' ? 'System services · actions may require administrator permission.' : 'Services owned by this SSH account · no administrator permission needed.'}</span></div><table><colgroup><col class="service-unit"><col class="service-state"><col class="service-enabled"><col class="service-actions"></colgroup><thead><tr><th scope="col">Unit</th><th scope="col">State</th><th scope="col">Enabled</th><th scope="col" class="service-actions-label">Actions</th></tr></thead><tbody>${rows}</tbody></table><p id="services-empty" class="services-context" hidden>No services match this filter.</p></article>` : `<p id="services-unavailable" role="status">${esc(selected.reason || 'User manager unavailable for this SSH account.')}</p>`}</section>`;
+  return head('Services', `${esc(state.host)} · systemd · ${plural(units.length, 'unit')}`, search('filter','Search services',svcFilter), counts + segTabs('scope',scope,[['system','System'],['user','User']])) + `<section class="grid services">${available ? `<article class="card full"><div class="card-top"><h2>Units</h2><span class="muted">${scope === 'system' ? 'System services · <span class="admin-note">actions may require administrator permission</span>' : 'Services owned by this SSH account · no administrator permission needed.'}</span></div><table><colgroup><col class="service-unit"><col class="service-state"><col class="service-enabled"><col class="service-actions"></colgroup><thead><tr><th scope="col">Unit</th><th scope="col">State</th><th scope="col">Enabled</th><th scope="col" class="service-actions-label">Actions</th></tr></thead><tbody>${rows}</tbody></table><p id="services-empty" class="services-context" hidden>No services match this filter.</p></article>` : `<p id="services-unavailable" role="status">${esc(selected.reason || 'User manager unavailable for this SSH account.')}</p>`}</section>`;
 }
 
 function applyFilter(el) {
@@ -39,6 +40,7 @@ function applyFilter(el) {
 }
 
 export function mount(el, { refresh }) {
+  fillAdminNote(el, currentTarget());
   events = new AbortController();
   applyFilter(el);
   el.querySelectorAll('[data-state], [data-scope]').forEach(b => b.setAttribute('aria-pressed', String(b.classList.contains('on'))));
@@ -88,7 +90,7 @@ export async function performServiceAction(el, action, unit, actionScope, refres
   const lockout = actionScope === 'system' && ['stop','disable'].includes(action) && carriesConnection(unit);
   try {
     const result = await runAction({ verb, object: unit, server,
-      scope: actionScope, password: actionScope === 'system' ? 'Yes, if sudo asks for it' : 'No',
+      scope: actionScope, password: actionScope === 'system' ? adminRow(target) : 'No',
       confirm: ['stop','restart','disable'].includes(action), allowSudo: actionScope === 'system',
       destructive: ['stop','disable'].includes(action),
       checks: lockout ? [{ id: 'lockout-ack', label: 'I have another way into ' + server, required: true }] : [],

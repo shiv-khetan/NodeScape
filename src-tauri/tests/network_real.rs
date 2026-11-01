@@ -4,6 +4,12 @@ mod contracts;
 #[path = "../src/network.rs"]
 mod network;
 #[allow(dead_code)]
+#[path = "../src/askpass.rs"]
+mod askpass;
+#[allow(dead_code)]
+#[path = "../src/credentials.rs"]
+mod credentials;
+#[allow(dead_code)]
 #[path = "../src/transport.rs"]
 mod transport;
 use contracts::Target;

@@ -19,6 +19,16 @@ fn flood(host: &str) {
 }
 
 fn main() {
+    // Askpass mode, as NodeScape's own exe behaves: answer password prompts only.
+    // ssh calls askpass with exactly one argument, the prompt; as ssh itself the fake sees many.
+    if let (Ok(secret), 2) = (std::env::var("NODESCAPE_ASKPASS"), std::env::args().count()) {
+        let prompt = std::env::args().nth(1).unwrap_or_default();
+        if prompt.to_ascii_lowercase().contains("password") {
+            println!("{secret}");
+            return;
+        }
+        std::process::exit(1);
+    }
     let args: Vec<_> = std::env::args().skip(1).collect();
     let host = if let Some(index) = args.iter().position(|arg| arg == "--") {
         args.get(index + 1).map(String::as_str).unwrap_or("echo")
@@ -45,6 +55,43 @@ fn main() {
         return;
     }
     match host {
+        "password-auth" => {
+            let askpass = std::env::var("SSH_ASKPASS").ok();
+            let forced = std::env::var("SSH_ASKPASS_REQUIRE").as_deref() == Ok("force");
+            let batch = args.iter().any(|a| a == "BatchMode=yes");
+            let answer = match askpass {
+                Some(program) if forced && !batch => std::process::Command::new(program)
+                    .arg("tester@password-auth's password: ")
+                    .output()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim_end().to_owned())
+                    .unwrap_or_default(),
+                _ => String::new(),
+            };
+            if answer == "right pw" {
+                println!("logged in with password");
+                for arg in &args {
+                    println!("{arg}");
+                }
+                return;
+            }
+            if !answer.is_empty() {
+                eprintln!("Permission denied, please try again.");
+            }
+            eprint!("tester@password-auth: Permission denied (publickey,password).");
+            std::process::exit(255);
+        }
+        "verbose-refused" | "verbose-ok" => {
+            assert!(args.iter().any(|a| a == "-v"), "diagnose must run ssh -v");
+            eprintln!("OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2");
+            eprintln!("debug1: Connecting to {host} [10.0.0.9] port 22.");
+            if host == "verbose-ok" {
+                eprintln!("debug1: Authenticated to {host} ([10.0.0.9]:22) using \"publickey\".");
+                return;
+            }
+            eprintln!("debug1: connect to address 10.0.0.9 port 22: Connection refused");
+            eprint!("ssh: connect to host {host} port 22: Connection refused");
+            std::process::exit(255);
+        }
         "stall" => {
             let mut path = String::new();
             io::stdin().lock().read_line(&mut path).unwrap();

@@ -14,6 +14,30 @@ fn quote_into(script: &mut String, value: &str) {
     script.push('\'');
 }
 
+const SUDO_STATUS: &str = r#"
+if ! command -v sudo >/dev/null 2>&1; then echo missing
+elif sudo -n true 2>/dev/null; then echo passwordless
+elif id -nG | tr ' ' '\n' | grep -qxE 'sudo|wheel|admin'; then echo password
+else echo none; fi
+"#;
+
+/// How admin actions will behave for this SSH account: "passwordless", "password" (asked per action),
+/// "none" (not in a sudo group, so admin actions will likely be refused) or "missing" (no sudo installed).
+pub fn parse_sudo_status(output: &str) -> &'static str {
+    match output.trim() {
+        "passwordless" => "passwordless",
+        "password" => "password",
+        "missing" => "missing",
+        _ => "none",
+    }
+}
+
+#[tauri::command]
+pub async fn sudo_status(target: Target) -> Result<&'static str, AppError> {
+    let output = transport::run(&target, SUDO_STATUS, RunOpts::default()).await?;
+    Ok(parse_sudo_status(&output))
+}
+
 /// Callers must validate argv and choose a fixed command; this is never exposed as an IPC command.
 pub async fn run_privileged(
     target: &Target,
@@ -228,5 +252,13 @@ mod tests {
             classify_ssh_failure("sudo: sorry, you must have a tty to run sudo", "", Some(1));
         assert_eq!(error.kind, ErrorKind::Remote);
         assert!(error.message.contains("requiretty"));
+    }
+
+    #[test]
+    fn sudo_status_maps_unknown_output_to_none() {
+        for (out, want) in [("passwordless
+", "passwordless"), ("password", "password"), ("missing", "missing"), ("none", "none"), ("", "none"), ("garbage", "none")] {
+            assert_eq!(parse_sudo_status(out), want);
+        }
     }
 }

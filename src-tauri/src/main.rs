@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod accounts;
+mod askpass;
 mod contracts;
+mod credentials;
 mod files;
 mod network;
 mod onboarding;
@@ -156,6 +158,8 @@ async fn logs(
 }
 
 fn main() {
+    // ssh runs this exe as SSH_ASKPASS for password logins; answer and exit before any UI starts.
+    askpass::run_if_requested();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -169,6 +173,11 @@ fn main() {
             onboarding::environment_check,
             onboarding::public_key_read,
             onboarding::connection_test,
+            onboarding::connection_diagnose,
+            credentials::login_password_set,
+            credentials::login_password_forget,
+            credentials::login_password_saved,
+            sudo::sudo_status,
             terminal::terminal_open_kind,
             hosts,
             query,

@@ -366,3 +366,10 @@ button, a, summary, select { -webkit-tap-highlight-color:transparent; }
   @starting-style { dialog[open] { opacity:0; } }
 }
 button { text-box:trim-both cap alphabetic; }
+/* Connection setup: auth choice, advanced options, ssh -v log. */
+.field-label { display:block;color:var(--muted);font-size:var(--font-meta);margin-bottom:var(--space-2); }
+.setup-advanced summary { cursor:pointer;color:var(--muted);font-size:var(--font-meta);padding-block:var(--space-1); }
+.setup-advanced[open] summary { margin-bottom:var(--space-2); }
+.ssh-log { max-block-size:320px;overflow:auto;overscroll-behavior:contain;padding:var(--space-3);background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);white-space:pre-wrap;overflow-wrap:anywhere; }
+[data-diagnosis]:not(:empty), [data-test-details]:not(:empty) { margin-top:var(--space-4); }
+.setup-card .confirm-check { display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-3);color:var(--ink); }

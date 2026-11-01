@@ -150,6 +150,13 @@ fn ssh_command(target: &Target, program: &Path, proxy: Option<&str>) -> CommandB
         command.arg("-o");
         command.arg(format!("ProxyCommand={proxy}"));
     }
+    // A saved login password answers ssh's single prompt through NodeScape's askpass mode.
+    if let Some(password) = crate::credentials::password(target) {
+        command.args(["-o", "NumberOfPasswordPrompts=1"]);
+        command.env("SSH_ASKPASS", std::env::current_exe().unwrap_or_else(|_| "nodescape".into()));
+        command.env("SSH_ASKPASS_REQUIRE", "force");
+        command.env(crate::askpass::SECRET_ENV, password.as_str());
+    }
     command.args(["--", &target.host]);
     command.env("TERM", "xterm-256color");
     command
@@ -861,5 +868,18 @@ mod onboarding_tests {
         assert!(kind_command(&target, SessionKind::InstallKey, &bad, None).is_err());
         assert!(serde_json::from_str::<SessionKind>("\"sh\"").is_err());
         assert!(serde_json::from_str::<KindArgs>(r#"{"command":"id"}"#).is_err());
+    }
+
+    #[test]
+    fn saved_login_passwords_reach_the_terminal_through_askpass_only() {
+        let target = Target { host: "terminal-password".into(), config: None };
+        let plain = ssh_command(&target, Path::new("ssh"), None);
+        assert!(plain.get_env(crate::askpass::SECRET_ENV).is_none());
+        crate::credentials::remember_for_session(&target, "term pw".into()).unwrap();
+        let command = ssh_command(&target, Path::new("ssh"), None);
+        assert_eq!(command.get_env("SSH_ASKPASS_REQUIRE").and_then(|v| v.to_str()), Some("force"));
+        assert!(argv(command.clone()).iter().any(|a| a == "NumberOfPasswordPrompts=1"));
+        assert!(!argv(command).iter().any(|a| a.contains("term pw")));
+        crate::credentials::forget(&target);
     }
 }

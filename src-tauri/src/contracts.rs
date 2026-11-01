@@ -30,6 +30,9 @@ pub enum ErrorKind {
     OutcomeUnknown,
     Remote,
     Internal,
+    PasswordRequired,
+    PasswordRefused,
+    ConnectionClosed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -91,6 +94,16 @@ pub(crate) fn classify_ssh_failure_redacted(
     .any(|s| text.contains(s))
     {
         ErrorKind::AuthFailed
+    } else if [
+        "Connection closed by",
+        "kex_exchange_identification",
+        "Connection reset",
+        "Broken pipe",
+    ]
+    .iter()
+    .any(|s| text.contains(s))
+    {
+        ErrorKind::ConnectionClosed
     } else if ["Connection timed out", "Operation timed out"]
         .iter()
         .any(|s| text.contains(s))
@@ -129,6 +142,19 @@ pub(crate) fn classify_ssh_failure_redacted(
         ErrorKind::Remote
     };
     AppError::new(kind, redact_text(&message, password))
+}
+
+/// A refused login on a server that accepts passwords is either "ask for one" or "that one was wrong".
+pub(crate) fn auth_kind(text: &str, used_password: bool) -> Option<ErrorKind> {
+    let methods = text.split("Permission denied (").nth(1)?.split(')').next()?;
+    methods
+        .split(',')
+        .any(|m| matches!(m.trim(), "password" | "keyboard-interactive"))
+        .then_some(if used_password {
+            ErrorKind::PasswordRefused
+        } else {
+            ErrorKind::PasswordRequired
+        })
 }
 
 pub(crate) fn redact_text(value: &str, password: Option<&str>) -> Zeroizing<String> {
@@ -409,4 +435,31 @@ mod tests {
             assert!(!valid_remote_path(path));
         }
     }
+
+    #[test]
+    fn connection_drops_are_their_own_kind() {
+        for text in [
+            "Connection closed by 10.0.0.2 port 22",
+            "kex_exchange_identification: read: Connection reset by peer",
+            "kex_exchange_identification: Connection closed by remote host",
+            "client_loop: send disconnect: Broken pipe",
+            "Connection reset by 10.0.0.2 port 22",
+        ] {
+            assert_eq!(classify_ssh_failure(text, "", Some(255)).kind, ErrorKind::ConnectionClosed, "{text}");
+        }
+    }
+
+    #[test]
+    fn password_capable_servers_ask_for_a_password_or_report_it_refused() {
+        let both = "testuser@testbox: Permission denied (publickey,password).";
+        let kbd = "testuser@testbox: Permission denied (publickey,keyboard-interactive).";
+        let keys = "testuser@testbox: Permission denied (publickey).";
+        assert_eq!(auth_kind(both, false), Some(ErrorKind::PasswordRequired));
+        assert_eq!(auth_kind(kbd, false), Some(ErrorKind::PasswordRequired));
+        assert_eq!(auth_kind(both, true), Some(ErrorKind::PasswordRefused));
+        assert_eq!(auth_kind(keys, false), None);
+        assert_eq!(auth_kind(keys, true), None);
+        assert_eq!(auth_kind("Connection refused", false), None);
+    }
+
 }
