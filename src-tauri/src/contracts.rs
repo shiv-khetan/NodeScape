@@ -146,7 +146,11 @@ pub(crate) fn classify_ssh_failure_redacted(
 
 /// A refused login on a server that accepts passwords is either "ask for one" or "that one was wrong".
 pub(crate) fn auth_kind(text: &str, used_password: bool) -> Option<ErrorKind> {
-    let methods = text.split("Permission denied (").nth(1)?.split(')').next()?;
+    let methods = text
+        .split("Permission denied (")
+        .nth(1)?
+        .split(')')
+        .next()?;
     methods
         .split(',')
         .any(|m| matches!(m.trim(), "password" | "keyboard-interactive"))
@@ -445,7 +449,11 @@ mod tests {
             "client_loop: send disconnect: Broken pipe",
             "Connection reset by 10.0.0.2 port 22",
         ] {
-            assert_eq!(classify_ssh_failure(text, "", Some(255)).kind, ErrorKind::ConnectionClosed, "{text}");
+            assert_eq!(
+                classify_ssh_failure(text, "", Some(255)).kind,
+                ErrorKind::ConnectionClosed,
+                "{text}"
+            );
         }
     }
 
@@ -461,5 +469,4 @@ mod tests {
         assert_eq!(auth_kind(keys, true), None);
         assert_eq!(auth_kind("Connection refused", false), None);
     }
-
 }

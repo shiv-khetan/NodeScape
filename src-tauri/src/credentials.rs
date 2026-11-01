@@ -19,7 +19,11 @@ fn store() -> &'static Store {
 
 /// The same alias under a different ssh config is a different server.
 fn key(target: &Target) -> String {
-    format!("{}\0{}", target.host, target.config.as_deref().unwrap_or("").trim())
+    format!(
+        "{}\0{}",
+        target.host,
+        target.config.as_deref().unwrap_or("").trim()
+    )
 }
 
 /// Credential Manager entry name: readable host plus a short hash of the full key.
@@ -31,11 +35,17 @@ fn saved_name(target: &Target) -> String {
 
 pub fn validate(password: &str) -> Result<(), AppError> {
     if password.is_empty() || password.chars().count() > 1024 {
-        return Err(AppError::new(ErrorKind::InvalidInput, "Enter a password of 1–1024 characters"));
+        return Err(AppError::new(
+            ErrorKind::InvalidInput,
+            "Enter a password of 1–1024 characters",
+        ));
     }
     // askpass answers with one line, so a line break would truncate the password silently.
     if password.contains(['\0', '\r', '\n']) {
-        return Err(AppError::new(ErrorKind::InvalidInput, "Passwords cannot contain line breaks"));
+        return Err(AppError::new(
+            ErrorKind::InvalidInput,
+            "Passwords cannot contain line breaks",
+        ));
     }
     Ok(())
 }
@@ -79,7 +89,11 @@ pub struct LoginPassword {
 
 #[tauri::command]
 pub fn login_password_set(login: LoginPassword) -> Result<(), AppError> {
-    let LoginPassword { target, password, remember } = login;
+    let LoginPassword {
+        target,
+        password,
+        remember,
+    } = login;
     let password = Zeroizing::new(password);
     validate(&password)?;
     if remember {
@@ -117,11 +131,19 @@ mod saved {
     pub fn save(name: &str, password: &str) -> Result<(), AppError> {
         entry(name)
             .and_then(|e| e.set_password(password))
-            .map_err(|e| AppError::new(ErrorKind::Internal, format!("Could not save the password: {e}")))
+            .map_err(|e| {
+                AppError::new(
+                    ErrorKind::Internal,
+                    format!("Could not save the password: {e}"),
+                )
+            })
     }
 
     pub fn load(name: &str) -> Option<Zeroizing<String>> {
-        entry(name).and_then(|e| e.get_password()).ok().map(Zeroizing::new)
+        entry(name)
+            .and_then(|e| e.get_password())
+            .ok()
+            .map(Zeroizing::new)
     }
 
     pub fn delete(name: &str) {
@@ -135,7 +157,10 @@ mod saved {
     use crate::contracts::{AppError, ErrorKind};
     use zeroize::Zeroizing;
     pub fn save(_: &str, _: &str) -> Result<(), AppError> {
-        Err(AppError::new(ErrorKind::Internal, "Saving passwords is supported on Windows only"))
+        Err(AppError::new(
+            ErrorKind::Internal,
+            "Saving passwords is supported on Windows only",
+        ))
     }
     pub fn load(_: &str) -> Option<Zeroizing<String>> {
         None
@@ -148,7 +173,10 @@ mod tests {
     use super::*;
 
     fn target(host: &str, config: Option<&str>) -> Target {
-        Target { host: host.into(), config: config.map(Into::into) }
+        Target {
+            host: host.into(),
+            config: config.map(Into::into),
+        }
     }
 
     #[test]
@@ -168,7 +196,10 @@ mod tests {
     fn rejects_empty_oversized_and_multiline_passwords() {
         let t = target("cred-b", None);
         for bad in ["", "a\nb", "a\rb", "a\0b"] {
-            assert_eq!(remember_for_session(&t, bad.into()).unwrap_err().kind, ErrorKind::InvalidInput);
+            assert_eq!(
+                remember_for_session(&t, bad.into()).unwrap_err().kind,
+                ErrorKind::InvalidInput
+            );
         }
         assert!(remember_for_session(&t, "x".repeat(1025)).is_err());
         assert!(password(&t).is_none());
@@ -179,10 +210,18 @@ mod tests {
     #[ignore]
     fn saved_passwords_round_trip_through_credential_manager() {
         let t = target("nodescape-selftest.invalid", Some("C:/selftest/config"));
-        login_password_set(LoginPassword { target: t.clone(), password: "s3cret test".into(), remember: true }).unwrap();
+        login_password_set(LoginPassword {
+            target: t.clone(),
+            password: "s3cret test".into(),
+            remember: true,
+        })
+        .unwrap();
         session().remove(&key(&t));
         assert!(login_password_saved(t.clone()));
-        assert_eq!(password(&t).as_deref().map(String::as_str), Some("s3cret test"));
+        assert_eq!(
+            password(&t).as_deref().map(String::as_str),
+            Some("s3cret test")
+        );
         forget(&t);
         assert!(!login_password_saved(t.clone()));
     }

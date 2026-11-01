@@ -245,7 +245,10 @@ pub fn profile_save(app: tauri::AppHandle, profile: Profile) -> Result<Profile, 
 pub fn profile_remove(app: tauri::AppHandle, id: String) -> Result<(), AppError> {
     let path = config_dir(&app)?.join("profiles.json");
     if let Some(profile) = read(&path).profiles.into_iter().find(|p| p.id == id) {
-        crate::credentials::forget(&crate::contracts::Target { host: profile.host, config: profile.config });
+        crate::credentials::forget(&crate::contracts::Target {
+            host: profile.host,
+            config: profile.config,
+        });
     }
     remove(&path, &id)
 }

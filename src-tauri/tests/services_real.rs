@@ -1,18 +1,18 @@
 #[allow(dead_code)]
+#[path = "../src/askpass.rs"]
+mod askpass;
+#[allow(dead_code)]
 #[path = "../src/contracts.rs"]
 mod contracts;
+#[allow(dead_code)]
+#[path = "../src/credentials.rs"]
+mod credentials;
 #[allow(dead_code)]
 #[path = "../src/services.rs"]
 mod services;
 #[allow(dead_code)]
 #[path = "../src/sudo.rs"]
 mod sudo;
-#[allow(dead_code)]
-#[path = "../src/askpass.rs"]
-mod askpass;
-#[allow(dead_code)]
-#[path = "../src/credentials.rs"]
-mod credentials;
 #[allow(dead_code)]
 #[path = "../src/transport.rs"]
 mod transport;

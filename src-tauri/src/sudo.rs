@@ -256,8 +256,18 @@ mod tests {
 
     #[test]
     fn sudo_status_maps_unknown_output_to_none() {
-        for (out, want) in [("passwordless
-", "passwordless"), ("password", "password"), ("missing", "missing"), ("none", "none"), ("", "none"), ("garbage", "none")] {
+        for (out, want) in [
+            (
+                "passwordless
+",
+                "passwordless",
+            ),
+            ("password", "password"),
+            ("missing", "missing"),
+            ("none", "none"),
+            ("", "none"),
+            ("garbage", "none"),
+        ] {
             assert_eq!(parse_sudo_status(out), want);
         }
     }

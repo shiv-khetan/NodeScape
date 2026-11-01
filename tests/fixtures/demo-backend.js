@@ -55,9 +55,11 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     clock += 0.5;
     cpu = clamp(cpu + rnd(-14, 14), 3, 94);
     memUsed = clamp(memUsed + rnd(-0.3, 0.3) * GB, 4 * GB, 12 * GB);
+    const advance = () => { busy += cpu * 40; idle += (100 - cpu) * 40; rx += rnd(0.1, 5) * 2 ** 20 * 0.5; tx += rnd(0.05, 1.5) * 2 ** 20 * 0.5; };
+    // A full snapshot samples, waits, samples; a quick one finds the counters already moved since the last snapshot.
+    if (quick) advance();
     const rx1 = netDev(), a = statLine();
-    busy += cpu * 40; idle += (100 - cpu) * 40;
-    rx += rnd(0.1, 5) * 2 ** 20 * 0.5; tx += rnd(0.05, 1.5) * 2 ** 20 * 0.5;
+    if (!quick) advance();
     const total = 32 * GB, cache = 11 * GB, free = total - memUsed - cache;
     const l1 = ((cpu / 100) * 8 * rnd(0.8, 1.1)).toFixed(2);
     return [

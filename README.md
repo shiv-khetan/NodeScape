@@ -1,11 +1,35 @@
 # NodeScape
 
-NodeScape is a desktop control panel for Linux servers over SSH. It shows system health,
-processes, services, logs, schedules, accounts and network state, with an interactive
-terminal and an SFTP file browser. Nothing needs to be installed on the remote server.
-The app uses native JavaScript modules and a Rust/Tauri backend.
+NodeScape is a calm desktop control panel for Linux servers over plain SSH. It shows system
+health, services, processes, logs, schedules, accounts and network state, with an interactive
+terminal and an SFTP file browser. It uses the OpenSSH client already on your PC; nothing is
+installed on the server. The app is a Rust/Tauri backend with a framework-free JavaScript UI.
 
-> Screenshots: placeholder — add reviewed screenshots with made-up server data before release.
+**Website and docs:** the `site/` folder is published with GitHub Pages (see
+[Website](#website)). The docs cover installing, adding a server, each page, keyboard
+shortcuts, troubleshooting and the security model.
+
+![NodeScape Overview: failed services first, then CPU, memory, disks and temperatures, with every saved server's health in the sidebar](site/images/overview.png)
+
+| Connect with a key or a password | Admin actions that read before they run |
+| --- | --- |
+| ![Add a server: hostname or IP, port, user, SSH key or password, optional jump host](site/images/add-server.png) | ![Stopping ssh.service warns that it can end the connection and asks for confirmation](site/images/lockout.png) |
+
+Screenshots use built-in demo data; every name and address in them is made up.
+
+## Features
+
+- **Problems first.** Failed services and journal errors lead the Overview, with Restart and
+  Logs beside them. Healthy things stay quiet.
+- **Every server at a glance.** The sidebar shows each saved server's health (healthy,
+  N failed, unreachable, needs login), checked every two minutes.
+- **Key or password login.** Add a server by host or IP, port and user, with an SSH key or a
+  password and an optional jump host. Passwords can be remembered, encrypted in Windows
+  Credential Manager. Failures explain themselves, and Show details runs `ssh -v`.
+- **Safe admin actions.** Confirmations name the server, scope and sudo need. Sudo passwords
+  are used once. Stopping the units your connection depends on needs an explicit confirmation.
+- **Keyboard first.** <kbd>Ctrl</kbd>+<kbd>K</kbd> command palette, <kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>9</kbd>
+  pages, <kbd>/</kbd> to search, arrow keys through tables.
 
 ## Install
 
@@ -17,16 +41,18 @@ but native Linux installer and desktop behavior still need manual verification.
 ## First run
 
 1. Open NodeScape. The environment check locates system SSH and ssh-keygen.
-2. Choose an alias from an existing SSH config, or add a server to NodeScape's own config.
-   For example, use alias `workshop`, host `box.example` and user `operator`.
+2. Choose an alias from an existing SSH config, or add a new server: hostname or IP address,
+   port, SSH user, and either an SSH key or a password. For example, alias `workshop`,
+   host `box.example`, user `operator`. Under Advanced you can add one jump host.
 3. Compare the host fingerprint with a trusted source. The embedded OpenSSH prompt lets
    you approve first contact explicitly. Investigate changed keys with the administrator.
-4. Use an existing key, generate a key, or install a public key through the guided terminal.
-   Test the connection and save the server.
+4. Optionally install a public key through the guided terminal. Test the connection
+   (password servers ask for the password here) and save the server.
 
-Normal dashboard operations need authentication that works without interactive prompts
-(for example an unlocked SSH agent). Profiles store names, targets and config paths,
-not passwords or private-key contents. Files opens the SSH account's home directory.
+Key logins work through your SSH agent or key files. Password logins are typed when you
+connect; tick "Remember on this computer" to keep the password encrypted in Windows
+Credential Manager. Profiles store names, targets and config paths, never private keys.
+Files opens the SSH account's home directory.
 Linux tools such as systemctl, journalctl, ip and sensors provide the displayed data;
 missing tools or permissions appear as unavailable. Network inspection is read-only.
 
@@ -51,7 +77,6 @@ npm run build
 The build first scans the shipping frontend (`src/`) for test/demo material and likely
 secrets or personal data, then produces installers in `src-tauri/target/release/bundle/`.
 The scanner guards against common mistakes; review release contents as well.
-For shared worktrees with a pre-existing node_modules junction, use the existing dependencies.
 
 ## Tests
 
@@ -102,8 +127,12 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
 - System OpenSSH handles keys, agents, SSH config and known_hosts. Normal connections
   use strict host-key checks; first-contact approval is explicit in OpenSSH's terminal prompt.
-- Passwords are never stored. Sudo credentials are requested per action, sent over stdin
-  for a fixed validated operation and discarded. Mutations are never automatically retried.
+- Sudo passwords are requested per action, sent over stdin for a fixed validated operation
+  and discarded. Mutations are never automatically retried.
+- Login passwords are held in memory for the session and, only if you choose, saved
+  encrypted in Windows Credential Manager (Local persistence, never roaming). ssh receives
+  them through NodeScape's own askpass mode, which answers password prompts only. No IPC
+  command returns a saved password.
 - Rust validates IPC inputs. Application commands are enrolled in an ACL manifest and granted
   only to the local main window. Dialog permissions allow only open/save; remote pages get none.
 - Scripts and assets are local. CSP blocks inline scripts, eval, frames, forms and external
@@ -113,6 +142,15 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
   tooling may need internet access during development or packaging.
 
 See [SECURITY.md](SECURITY.md) for reporting and threat boundaries.
+
+## Website
+
+The project website lives in `site/` (plain HTML and CSS that reuse the app's design tokens).
+The [Pages workflow](.github/workflows/pages.yml) copies it, adds the bundled Inter font and
+deploys it. To publish: in the repository settings, open **Pages** and set the source to
+**GitHub Actions**. Links to the repository adjust to the account and repository name
+automatically. To refresh the screenshots, capture them from the demo data in the test
+fixtures so that no real server details appear.
 
 ## License
 

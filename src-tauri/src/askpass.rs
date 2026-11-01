@@ -7,14 +7,24 @@ pub const SECRET_ENV: &str = "NODESCAPE_ASKPASS";
 pub fn is_password_prompt(prompt: &str) -> bool {
     let prompt = prompt.to_ascii_lowercase();
     prompt.contains("password")
-        && !["new password", "current", "retype", "passphrase", "(yes/no", "verification", "code"]
-            .iter()
-            .any(|word| prompt.contains(word))
+        && ![
+            "new password",
+            "current",
+            "retype",
+            "passphrase",
+            "(yes/no",
+            "verification",
+            "code",
+        ]
+        .iter()
+        .any(|word| prompt.contains(word))
 }
 
 /// Call first thing in main(): exits when this process is an askpass invocation.
 pub fn run_if_requested() {
-    let Some(secret) = std::env::var_os(SECRET_ENV) else { return };
+    let Some(secret) = std::env::var_os(SECRET_ENV) else {
+        return;
+    };
     let prompt = std::env::args().nth(1).unwrap_or_default();
     if is_password_prompt(&prompt) {
         use std::io::Write;
@@ -33,7 +43,11 @@ mod tests {
 
     #[test]
     fn answers_password_prompts_only() {
-        for prompt in ["operator@nas-01's password: ", "Password: ", "(operator@nas-01) Password:"] {
+        for prompt in [
+            "operator@nas-01's password: ",
+            "Password: ",
+            "(operator@nas-01) Password:",
+        ] {
             assert!(is_password_prompt(prompt), "{prompt}");
         }
         for prompt in [

@@ -119,7 +119,8 @@ fn hosts(config: Option<String>) -> Vec<String> {
 
 // Fleet health: a cheap check of a saved server that is not on screen. `grep -c` prints 0 and exits 1
 // when nothing failed, so `|| true` keeps a healthy server from reading as an error.
-const HEALTH: &str = "systemctl --failed --no-legend --plain --no-pager 2>/dev/null | grep -c . || true\n";
+const HEALTH: &str =
+    "systemctl --failed --no-legend --plain --no-pager 2>/dev/null | grep -c . || true\n";
 
 #[derive(serde::Serialize, Debug, PartialEq)]
 struct Health {
@@ -254,7 +255,9 @@ mod tests {
         // Live refreshes skip the 0.5 s CPU/network sampling sleep; the frontend diffs against the last sample.
         assert!(SNAPSHOT.contains("[ -n \"$QUICK\" ] || { sleep 0.5; head -1 /proc/stat; }"));
         assert!(SNAPSHOT.contains("[ -n \"$QUICK\" ] || { echo @rx2; tail -n +3 /proc/net/dev; }"));
-        assert!(snapshot_script("snapshot_quick").unwrap().starts_with("QUICK=1\n"));
+        assert!(snapshot_script("snapshot_quick")
+            .unwrap()
+            .starts_with("QUICK=1\n"));
         assert!(!snapshot_script("snapshot").unwrap().contains("QUICK=1"));
         assert!(snapshot_script("other").is_none());
         assert_eq!(parse_health("3\n").unwrap(), Health { failed: 3 });

@@ -127,8 +127,16 @@ pub async fn diagnose(target: &Target, mut opts: RunOpts) -> Diagnosis {
     let result = run(target, "exit 0\n", opts).await;
     let log = std::mem::take(&mut *sink.lock().unwrap_or_else(|e| e.into_inner()));
     match result {
-        Ok(_) => Diagnosis { ok: true, error: None, log },
-        Err(error) => Diagnosis { ok: false, error: Some(error), log },
+        Ok(_) => Diagnosis {
+            ok: true,
+            error: None,
+            log,
+        },
+        Err(error) => Diagnosis {
+            ok: false,
+            error: Some(error),
+            log,
+        },
     }
 }
 
@@ -170,7 +178,11 @@ async fn proxy_jump(
     cancelled: &mut watch::Receiver<bool>,
 ) -> Result<Option<String>, AppError> {
     let key = proxy_cache_key(target, opts);
-    if let Some((at, jump)) = proxy_cache().lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+    if let Some((at, jump)) = proxy_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&key)
+    {
         if at.elapsed() < PROXY_TTL {
             return Ok(jump.clone());
         }
@@ -559,7 +571,8 @@ async fn invoke(
             let stderr = redact_text(&String::from_utf8_lossy(&stderr), login);
             if let Some(sink) = &opts.diagnostics {
                 let log = redact_text(&stderr, secret);
-                *sink.lock().unwrap_or_else(|e| e.into_inner()) = log.chars().take(64 * 1024).collect();
+                *sink.lock().unwrap_or_else(|e| e.into_inner()) =
+                    log.chars().take(64 * 1024).collect();
             }
             if !status.success() {
                 let error = match secret {

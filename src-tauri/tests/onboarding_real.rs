@@ -1,7 +1,13 @@
 // Run explicitly by the architect; these tests never generate or install keys.
 #[allow(dead_code)]
+#[path = "../src/askpass.rs"]
+mod askpass;
+#[allow(dead_code)]
 #[path = "../src/contracts.rs"]
 mod contracts;
+#[allow(dead_code)]
+#[path = "../src/credentials.rs"]
+mod credentials;
 #[allow(dead_code)]
 #[path = "../src/onboarding.rs"]
 mod onboarding;
@@ -14,12 +20,6 @@ mod ssh_config;
 #[allow(dead_code)]
 #[path = "../src/terminal.rs"]
 mod terminal;
-#[allow(dead_code)]
-#[path = "../src/askpass.rs"]
-mod askpass;
-#[allow(dead_code)]
-#[path = "../src/credentials.rs"]
-mod credentials;
 #[allow(dead_code)]
 #[path = "../src/transport.rs"]
 mod transport;

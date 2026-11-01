@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NodeScape docs</title>
+<meta name="description" content="Install NodeScape, add a server with a key or a password, use each page, keyboard shortcuts, troubleshooting and the security model.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="site.css">
+</head>
+<body class="doc">
+<div class="shell">
+  <header class="sidebar" aria-label="Site">
+    <a class="brand" href="./"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 18V6l14 12V6"/></svg></span>NodeScape</a>
+    <nav class="nav" aria-label="Site">
+      <a href="./" class="keep"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Home</span></a>
+      <a href="docs.html" aria-current="page" class="keep"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5"/></svg><span>Docs</span></a>
+    </nav>
+    <nav class="nav doc-nav" aria-label="On this page">
+      <span class="nav-label">On this page</span>
+      <a href="#install"><span>Install</span></a>
+      <a href="#add-server"><span>Add a server</span></a>
+      <a href="#passwords"><span>Password login and remembered passwords</span></a>
+      <a href="#pages"><span>Pages</span></a>
+      <a href="#fleet"><span>Server health in the sidebar</span></a>
+      <a href="#admin"><span>Admin actions and sudo</span></a>
+      <a href="#shortcuts"><span>Keyboard shortcuts</span></a>
+      <a href="#troubleshooting"><span>Connection problems</span></a>
+      <a href="#build"><span>Build from source and run tests</span></a>
+      <a href="#security"><span>Security model</span></a>
+    </nav>
+    <p class="sidebar-foot">Open source · Apache-2.0<br><a data-repo="" href="https://github.com">Source on GitHub</a></p>
+  </header>
+  <main id="top">
+    <div class="page-head">
+      <div>
+        <h1>Docs</h1>
+        <p class="page-meta">Install NodeScape, add a server, and learn what each part does. The app needs nothing on the server beyond standard Linux tools and your SSH login.</p>
+      </div>
+    </div>
+<section id="install">
+  <h2>Install</h2>
+  <p>Download the Windows installer from the <a data-repo="/releases/latest" href="https://github.com">latest release</a> and run it.</p>
+  <p>Windows needs Microsoft Edge WebView2 Runtime and the OpenSSH client available to your account.</p>
+</section>
+
+<section id="add-server">
+  <h2>Add a server</h2>
+  <p>Open NodeScape. The environment check locates system SSH and <code>ssh-keygen</code>.</p>
+  <ol>
+    <li>
+      Choose an alias from an existing SSH config, or use the New server form.
+      <p>For a new server, enter a server name, alias, hostname or IP address, port, and SSH user. Choose SSH key or Password for authentication. For SSH key authentication, you can choose an existing key, enter a new key path, or generate a key.</p>
+      <p>Under Advanced, you can add a jump host, written as <code>user@bastion.example:22</code>. One hop is supported, and the jump host never receives your password.</p>
+    </li>
+    <li>Compare the host fingerprint with a trusted source. Approve first contact in the OpenSSH prompt only after checking it. Investigate a changed key with the administrator.</li>
+    <li>Optionally install a public key through the guided terminal.</li>
+    <li>Test the connection and save the server.</li>
+  </ol>
+</section>
+
+<section id="passwords">
+  <h2>Password login and remembered passwords</h2>
+  <p>Enter the server login password when connecting. You can select “Remember on this computer” to save it encrypted in Windows Credential Manager. It uses Local persistence and does not roam.</p>
+  <p>The password is never written to the SSH config. NodeScape forgets it if the server refuses it or you remove the server.</p>
+  <p class="note">Processes running as the same Windows user can read Credential Manager and process environments. A remembered password is not protected from those processes.</p>
+</section>
+
+<section id="pages">
+  <h2>Pages</h2>
+  <dl>
+    <dt>Overview</dt>
+    <dd>Failed services and recent journal errors first, with Restart and Logs beside each failure. Then CPU usage and history, memory, disks, temperatures, network traffic and the recent journal. Live updates refresh every five seconds and can be paused.</dd>
+    <dt>Services</dt>
+    <dd>System and user systemd units with their state. Each row offers only the actions that fit: Start, Stop, Restart, Enable, Disable and Logs.</dd>
+    <dt>Processes</dt>
+    <dd>Running processes sorted by CPU, with memory use and how long each has run.</dd>
+    <dt>Logs</dt>
+    <dd>The systemd journal with a separator for each day, an errors filter, a unit filter that suggests known units, message search and 100, 300 or 1000 lines.</dd>
+    <dt>Scheduled</dt>
+    <dd>systemd timers with their next and last runs, and the SSH user’s crontab.</dd>
+    <dt>Network</dt>
+    <dd>Interfaces, routes, listening ports, firewall services and Tailscale peers. This page is read-only.</dd>
+    <dt>Terminal</dt>
+    <dd>An interactive terminal on the server over SSH.</dd>
+    <dt>Files</dt>
+    <dd>An SFTP browser that opens the SSH account’s home directory, with upload, download, rename, delete and a text editor that will not overwrite a newer copy.</dd>
+    <dt>Users</dt>
+    <dd>Accounts and groups. Creating users and changing group membership ask for administrator permission each time.</dd>
+  </dl>
+  <p>Missing Linux tools or permissions appear as unavailable.</p>
+</section>
+
+<section id="fleet">
+  <h2>Server health in the sidebar</h2>
+  <p>With two or more saved servers, the sidebar shows server health. Statuses are healthy, N failed, unreachable, needs login, and host key.</p>
+  <p>Health is checked every two minutes. The current server’s status comes from its live snapshot.</p>
+</section>
+
+<section id="admin">
+  <h2>Admin actions and sudo</h2>
+  <p>Before an admin action, the confirmation dialog shows Server, Scope, and whether it requires an administrator password. When needed, NodeScape asks for your sudo password for that action. It uses the password once and never stores it.</p>
+  <p>The admin note reports one of these states:</p>
+  <ul>
+    <li>“Admin actions ask for your sudo password”</li>
+    <li>“Admin actions run with passwordless sudo”</li>
+    <li>“This account isn’t in a sudo group, so admin actions will likely be refused”</li>
+    <li>“sudo isn’t installed on this server, so admin actions are unavailable”</li>
+  </ul>
+  <p class="note">Actions on ssh, tailscaled, network, and firewall units can affect your access. The lockout warning requires you to confirm “I have another way into &lt;server&gt;”.</p>
+</section>
+
+<section id="shortcuts">
+  <h2>Keyboard shortcuts</h2>
+  <div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th scope="col">Shortcut</th>
+        <th scope="col">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>K</kbd></td>
+        <td>Open the command palette.</td>
+      </tr>
+      <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>1</kbd> to <kbd>Ctrl</kbd>+<kbd>9</kbd></td>
+        <td>Open pages in sidebar order.</td>
+      </tr>
+      <tr>
+        <td><kbd>Ctrl</kbd>+<kbd>R</kbd> or <kbd>F5</kbd></td>
+        <td>Refresh.</td>
+      </tr>
+      <tr>
+        <td><kbd>/</kbd></td>
+        <td>Focus search. On Logs, this focuses message search.</td>
+      </tr>
+      <tr>
+        <td><kbd>Up</kbd> or <kbd>Down</kbd></td>
+        <td>Move between table rows in the same column.</td>
+      </tr>
+      <tr>
+        <td><kbd>Esc</kbd></td>
+        <td>Close dialogs.</td>
+      </tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="troubleshooting">
+  <h2>Connection problems</h2>
+  <p>Choose “Show details” to run <code>ssh -v</code> and view the client log with the password removed.</p>
+  <div class="table-wrap"><table>
+    <thead>
+      <tr>
+        <th scope="col">Error shown</th>
+        <th scope="col">What it means</th>
+        <th scope="col">What to do</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Password required</td>
+        <td>The server accepts password login, and no password is held for this server.</td>
+        <td>Choose “Enter password” and enter the login password.</td>
+      </tr>
+      <tr>
+        <td>Password refused</td>
+        <td>The server refused the password. NodeScape has forgotten it.</td>
+        <td>Enter the password again.</td>
+      </tr>
+      <tr>
+        <td>Unreachable or timed out</td>
+        <td>Name resolution or the network connection failed, or the operation timed out.</td>
+        <td>Check the network or Tailscale connection to the server, then choose Retry.</td>
+      </tr>
+      <tr>
+        <td>Connection closed</td>
+        <td>The server closed or reset the connection. Connection limits, fail2ban, or an sshd restart may be responsible.</td>
+        <td>Check the server and retry.</td>
+      </tr>
+      <tr>
+        <td>Host key not trusted or changed</td>
+        <td>The host key is not trusted, or it differs from the trusted key.</td>
+        <td>Compare the fingerprint with a trusted source before approving first contact. Investigate a changed key with the administrator.</td>
+      </tr>
+      <tr>
+        <td>Authentication failed (key)</td>
+        <td>SSH authentication failed.</td>
+        <td>Check the SSH user and key configuration, then retry. Use “Show details” to inspect the client log.</td>
+      </tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="build">
+  <h2>Build from source and run tests</h2>
+  <p>Install Node.js 22+, stable Rust, and the platform’s Tauri build prerequisites. On Windows, these include Visual Studio C++ Build Tools, the Windows SDK, and WebView2.</p>
+  <p>On Ubuntu, install the required packages:</p>
+  <pre><code>sudo apt-get install build-essential libwebkit2gtk-4.1-dev libssl-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf</code></pre>
+  <p>From your checkout, run:</p>
+  <pre><code>npm ci
+npm run dev
+npm run build</code></pre>
+  <p>The build scans the shipping frontend, then places installers in <code>src-tauri/target/release/bundle/</code>. Review release contents as well.</p>
+  <p>Run the tests:</p>
+  <pre><code>npx playwright install chromium
+npm test
+npm run test:rust
+npm run check:release
+npm run test:app</code></pre>
+  <p><code>npm test</code> uses a local HTTP server and synthetic fixtures. <code>npm run test:app</code> is a separate Windows and WebView2 test project.</p>
+  <p>For additional release checks, run:</p>
+  <pre><code>cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings</code></pre>
+</section>
+
+<section id="security">
+  <h2>Security model</h2>
+  <ul>
+    <li>System OpenSSH handles keys, agents, SSH config, and known hosts. Check fingerprints before approving first contact and investigate changed keys.</li>
+    <li>Login passwords can be remembered in Windows Credential Manager. Sudo passwords are requested per action and never stored.</li>
+    <li>NodeScape validates inputs and limits application commands. The interactive terminal permits remote shell use.</li>
+    <li>The local Windows account, SSH configuration, agent, and selected identity files are trusted.</li>
+    <li>There is no telemetry or cloud backend. The app can work without internet access when the SSH server is reachable.</li>
+  </ul>
+  <p>For reporting guidance and threat boundaries, see <a data-repo="/blob/main/SECURITY.md" href="https://github.com">SECURITY.md</a>.</p>
+</section>
+  </main>
+</div>
+<script src="site.js"></script>
+</body>
+</html>

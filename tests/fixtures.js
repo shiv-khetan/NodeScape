@@ -21,7 +21,7 @@ const SNAPSHOT = [
   '@host', 'testbox',
   '@os', 'Debian GNU/Linux 12 (bookworm)',
   '@kernel', '6.1.0-test',
-  '@ip', '192.168.50.2 10.0.0.2',
+  '@ip', '192.0.2.50 10.0.0.2',
   '@uptime', '90061.00 0.00', // 1d 1h 1m
   '@load', '0.50 0.40 0.30 1/100 999',
   '@cpus', '4',

@@ -40,7 +40,11 @@ fn main() {
         if host.starts_with("countg-") {
             use std::io::Write as _;
             let log = std::env::temp_dir().join(format!("nodescape-fake-{host}.log"));
-            let mut file = std::fs::OpenOptions::new().create(true).append(true).open(log).unwrap();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log)
+                .unwrap();
             writeln!(file, "-G").unwrap();
         }
         match host {

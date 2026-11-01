@@ -1,14 +1,14 @@
 #[allow(dead_code)]
-#[path = "../src/contracts.rs"]
-mod contracts;
-#[path = "../src/network.rs"]
-mod network;
-#[allow(dead_code)]
 #[path = "../src/askpass.rs"]
 mod askpass;
 #[allow(dead_code)]
+#[path = "../src/contracts.rs"]
+mod contracts;
+#[allow(dead_code)]
 #[path = "../src/credentials.rs"]
 mod credentials;
+#[path = "../src/network.rs"]
+mod network;
 #[allow(dead_code)]
 #[path = "../src/transport.rs"]
 mod transport;

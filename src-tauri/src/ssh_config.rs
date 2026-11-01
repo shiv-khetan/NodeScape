@@ -85,16 +85,26 @@ fn render_block(server: &ManagedServer) -> Result<String, AppError> {
             {
                 return Err(invalid("Choose an existing identity file with an absolute path (no percent, dollar or quote characters)"));
             }
-            block += &format!("  IdentityFile \"{}\"\n  IdentitiesOnly yes\n", identity.replace('\\', "/"));
+            block += &format!(
+                "  IdentityFile \"{}\"\n  IdentitiesOnly yes\n",
+                identity.replace('\\', "/")
+            );
         }
         Auth::Password => {
             block += "  PreferredAuthentications password,keyboard-interactive\n  PubkeyAuthentication no\n";
         }
     }
-    if let Some(jump) = server.jump.as_deref().map(str::trim).filter(|j| !j.is_empty()) {
+    if let Some(jump) = server
+        .jump
+        .as_deref()
+        .map(str::trim)
+        .filter(|j| !j.is_empty())
+    {
         // One hop only; the transport re-validates it before every connection.
         if jump.contains(',') || !token(jump, "._-@:[]") {
-            return Err(invalid("Invalid jump host. Use [user@]host[:port] (one hop)."));
+            return Err(invalid(
+                "Invalid jump host. Use [user@]host[:port] (one hop).",
+            ));
         }
         block += &format!("  ProxyJump {jump}\n");
     }
@@ -149,7 +159,10 @@ mod managed_tests {
     #[test]
     fn password_servers_need_no_key_and_never_write_a_secret() {
         let mut s = server(String::new());
-        assert!(render_block(&s).is_err(), "key auth still needs an identity file");
+        assert!(
+            render_block(&s).is_err(),
+            "key auth still needs an identity file"
+        );
         s.auth = Auth::Password;
         s.identity_file = None;
         let block = render_block(&s).unwrap();
@@ -162,8 +175,16 @@ mod managed_tests {
         let mut s = server(String::new());
         s.auth = Auth::Password;
         s.jump = Some("admin@bastion.example:2222".into());
-        assert!(render_block(&s).unwrap().contains("  ProxyJump admin@bastion.example:2222\n"));
-        for bad in ["a,b", "-oProxyCommand=x", "bastion;id", "bastion\nHost evil", "bas tion"] {
+        assert!(render_block(&s)
+            .unwrap()
+            .contains("  ProxyJump admin@bastion.example:2222\n"));
+        for bad in [
+            "a,b",
+            "-oProxyCommand=x",
+            "bastion;id",
+            "bastion\nHost evil",
+            "bas tion",
+        ] {
             s.jump = Some(bad.into());
             assert!(render_block(&s).is_err(), "{bad}");
         }
