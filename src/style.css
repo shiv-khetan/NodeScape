@@ -393,4 +393,4 @@ button { text-box:trim-both cap alphabetic; }
 @media (width <= 1000px) { .fleet { display:none; } }
 
 /* Brand: the dot-grid N (white dots on the blue tile); field dots are faint so the letter reads at 24 px. */
-.brand-mark .dot-logo { width:20px;height:20px;fill:#fff;stroke:none; }
+.brand-mark .dot-logo { width:20px;height:20px;fill:var(--on-accent);stroke:none; }
