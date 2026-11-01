@@ -119,6 +119,8 @@ fn main() {
         }
         host if host.starts_with("countg-") => print!("ran"),
         "args" | "jump-one" | "jump-port" => {
+            // Read the script like `sh -s` would, so the writer never races a closed pipe.
+            io::copy(&mut io::stdin(), &mut io::sink()).unwrap();
             for arg in &args {
                 println!("{arg}");
             }

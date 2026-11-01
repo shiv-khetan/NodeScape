@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 const { openDemo } = require('./helpers');
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' }));
+  await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' }));
 });
 
 test('Mac shows ⌘ shortcuts, accepts Cmd keys and names the keychain', async ({ page }) => {

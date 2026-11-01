@@ -11,6 +11,8 @@ async function offline(page) {
 async function installBackend(page, options = {}) {
   page.on('dialog', async dialog => { await dialog.dismiss(); throw new Error('Unexpected native ' + dialog.type() + ' dialog'); });
   await offline(page);
+  // Specs expect Windows labels on every runner; mac.spec.js shadows this on the navigator itself.
+  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Win32', configurable: true }));
   await page.addInitScript({ content: fixture + '\nwindow.installDemoBackend(' + JSON.stringify(options) + ');' });
 }
 async function openDemo(page) {
