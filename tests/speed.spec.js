@@ -50,3 +50,21 @@ test('a live refresh updates the Overview in place, keeping unchanged nodes and 
   await pause.click();
   await expect(page.getByRole('button', { name: /Resume live updates/ })).toBeVisible();
 });
+
+test('long logs skip layout for off-screen rows but stay fully searchable and scrollable', async ({ page }) => {
+  await openDemo(page);
+  await page.locator('#nav button', { hasText: 'Logs' }).click();
+  await page.locator('[data-lines="1000"]').click();
+  await expect.poll(() => page.locator('.logrow').count()).toBeGreaterThan(300);
+  const row = page.locator('.logrow').first();
+  await expect(row).toHaveCSS('content-visibility', 'auto');
+  await expect(page.locator('.logday').first()).toHaveCSS('content-visibility', 'visible');
+  // Every row is still in the page: the last one scrolls into view with its text, and search still filters.
+  const last = page.locator('.logrow').last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  expect((await last.innerText()).length).toBeGreaterThan(10);
+  await page.getByRole('searchbox', { name: 'Search messages' }).fill('magicsock');
+  await expect.poll(() => page.locator('.logrow:visible').count()).toBeGreaterThan(0);
+  expect(await page.locator('.logrow:visible').evaluateAll(rows => rows.every(r => r.textContent.includes('magicsock')))).toBe(true);
+});
