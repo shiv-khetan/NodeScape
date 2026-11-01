@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { $ } from './dom.js';
 import { openPalette } from './palette.js';
+import { healthOf } from './fleet.js';
 
 // Global keys: Ctrl+K palette, Ctrl+1-9 pages, Ctrl+R/F5 refresh, / search, Up/Down between table rows.
 export function initShortcuts({ main, hostInput, go, refresh }) {
@@ -8,7 +9,7 @@ export function initShortcuts({ main, hostInput, go, refresh }) {
   pages.forEach((button, i) => { button.title += ' (Ctrl+' + (i + 1) + ')'; button.setAttribute('aria-keyshortcuts', 'Control+' + (i + 1)); });
   const palette = () => openPalette([
     ...pages.filter(b => !b.disabled).map((b, i) => ({ label: 'Go to ' + b.getAttribute('aria-label'), hint: 'Ctrl+' + (i + 1), run: () => go(b.dataset.view) })),
-    ...state.profiles.filter(p => p.id !== state.profileId).map(p => ({ label: 'Switch to ' + p.name, run: () => { hostInput.value = p.id; hostInput.dispatchEvent(new Event('change')); } })),
+    ...state.profiles.filter(p => p.id !== state.profileId).map(p => ({ label: 'Switch to ' + p.name, hint: healthOf(p.id)?.text, run: () => { hostInput.value = p.id; hostInput.dispatchEvent(new Event('change')); } })),
     { label: 'Refresh', hint: 'Ctrl+R', run: () => refresh() },
     { label: 'Add server', run: () => go('onboarding') },
     { label: 'Manage servers', run: () => go('servers') },

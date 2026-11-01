@@ -16,6 +16,7 @@ fn main() {
             "login_password_forget",
             "login_password_saved",
             "sudo_status",
+            "server_health",
             "terminal_open_kind",
             "hosts",
             "query",

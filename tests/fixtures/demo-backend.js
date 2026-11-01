@@ -283,6 +283,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     if (cmd === 'login_password_saved') return responses?.login_password_saved ?? false;
     if (cmd === 'connection_diagnose') return responses?.connection_diagnose ?? { ok: true, error: null, log: 'debug1: Authenticated to ' + args.target.host + ' using "publickey".' };
     if (cmd === 'sudo_status') return responses?.sudo_status ?? 'password';
+    if (cmd === 'server_health') { const r = responses?.[args.target.host + ':server_health'] ?? responses?.server_health; if (r?.error) throw r.error; return r ?? { failed: 0 }; }
     if (cmd === 'accounts_read' && responses && responses.accounts_read === undefined) return accountsFixture(cmd, args);
     if (/^(profiles_list|profile_save|profile_remove|environment_check|ssh_config_save|public_key_read|connection_test)$/.test(cmd) || (cmd === 'plugin:dialog|open' && args.options.title !== 'Upload file')) return onboardingFixture(cmd, args);
     if (cmd.startsWith('terminal_')) return terminalCommand(cmd, args);

@@ -19,6 +19,7 @@
     "allow-login-password-forget",
     "allow-login-password-saved",
     "allow-sudo-status",
+    "allow-server-health",
     "allow-terminal-open-kind",
     "allow-hosts",
     "allow-query",

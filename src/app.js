@@ -5,6 +5,7 @@ import { cancelConfirm } from './ui/confirm.js';
 import { initShortcuts } from './ui/shortcuts.js';
 import { morphChildren } from './ui/morph.js';
 import { initSettings, migrateLegacyHost } from './ui/settings.js';
+import * as fleet from './ui/fleet.js';
 import { $, esc, head, agoLabel } from './ui/dom.js';
 import { showError, passwordError, renderUnreachable, markStale } from './ui/errors.js';
 import { askLoginPassword } from './ui/connect.js';
@@ -77,7 +78,7 @@ async function refresh(fromTimer) {
     // Reject stale reads before parsing or touching snapshots and chart history.
     if (!isCurrent(request)) return;
     const data = route.snapshot ? parseSnapshot(text, request.target.host, state.snap?.raw) : text;
-    if (route.snapshot) acceptSnapshot(request, data);
+    if (route.snapshot) { acceptSnapshot(request, data); fleet.fromSnapshot(data); }
     const focused = document.activeElement?.id;
     if (route.page.morphable && mounted === route.page && main.dataset.page === request.view && !main.querySelector('.stale, .action-alert')) {
       const next = document.createElement('div');
@@ -95,6 +96,7 @@ async function refresh(fromTimer) {
     if (focused) main.querySelector('#' + focused)?.focus();
   } catch (error) {
     if (!isCurrent(request)) return;
+    fleet.fromError(error);
     const host = request.target.host;
     const server = state.profiles.find(p => p.id === state.profileId)?.name || host;
     // A server that wants a password asks for it here, then the same page loads again.
@@ -157,6 +159,7 @@ $('#refresh').addEventListener('click', () => refresh());
 hostInput.addEventListener('change', () => {
   selectProfile(state.profiles.find(p => p.id === hostInput.value));
   terminal.targetChanged();
+  fleet.render();
   go(state.profileId ? (['onboarding','servers'].includes(state.view) ? 'overview' : state.view) : 'onboarding');
 });
 $('#addServer').addEventListener('click', () => go('onboarding'));
@@ -166,12 +169,14 @@ async function loadProfiles() {
   state.profiles = result.profiles;
   state.profileWarning = result.warning || '';
   hostInput.innerHTML = '<option value="">Select a server</option>' + state.profiles.map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('');
+  fleet.render();
 }
 async function profilesChanged(profile, open = false) {
   await loadProfiles();
   const selected = state.profiles.find(p => p.id === (open ? profile?.id : state.profileId)) || state.profiles[0];
   selectProfile(selected); hostInput.value = state.profileId;
   terminal.targetChanged();
+  fleet.checkFleet();
   go(open ? 'overview' : 'servers');
 }
 initSettings();
@@ -183,6 +188,7 @@ async function start() {
     selectProfile(state.profiles.find(p => p.id === store('selectedProfile')) || state.profiles[0]);
     hostInput.value = state.profileId;
     refresh();
+    fleet.startFleet();
   } catch (error) {
     main.innerHTML = '<div class="empty"><h1>Saved servers could not be loaded</h1><p class="error">' + esc(error.kind + ': ' + error.message) + '</p><button class="pill" data-start-retry>Try again</button></div>';
     main.querySelector('[data-start-retry]').onclick = start;

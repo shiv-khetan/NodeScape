@@ -41,8 +41,10 @@ test('a live refresh updates the Overview in place, keeping unchanged nodes and 
   await card.evaluate(el => { el.dataset.marker = 'kept'; window.__memoryCard = el; });
   const pause = page.getByRole('button', { name: /Pause live updates/ });
   await pause.focus();
+  const queriesBefore = await page.evaluate(() => window.__calls.filter(c => c.cmd === 'query').length);
   await page.evaluate(() => document.querySelector('#refresh').click());
-  await expect.poll(() => page.evaluate(() => window.__calls.filter(c => c.cmd === 'query').length)).toBeGreaterThan(6);
+  await expect.poll(() => page.evaluate(() => window.__calls.filter(c => c.cmd === 'query').length)).toBeGreaterThan(queriesBefore);
+  await expect.poll(() => page.evaluate(() => !document.querySelector('#refresh').classList.contains('spin'))).toBe(true);
   await expect(page.locator('.stats')).toBeVisible();
   expect(await page.evaluate(() => document.querySelector('.overview-grid').contains(window.__memoryCard))).toBe(true);
   await expect(pause).toBeFocused();

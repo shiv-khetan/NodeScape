@@ -113,7 +113,7 @@ test('service menus offer only valid state and enablement actions',async({page})
 
 test('Manage servers is a table and Remove uses the shared confirmation',async({page})=>{
   await open(page);await page.locator('#manageServers').click();
-  await expect(page.locator('thead th')).toHaveText(['Name','Target','Config','Actions']);
+  await expect(page.locator('thead th')).toHaveText(['Name','Status','Target','Config','Actions']);
   const remove=page.locator('tbody tr').first().getByRole('button',{name:'Remove',exact:true});await expect(remove).toHaveClass(/destructive/);
   await remove.click();await expect(page.locator('.confirm-dialog')).toContainText('Requires administrator password');
   await expect(page.locator('.confirm-dialog')).not.toContainText(/maybe/);

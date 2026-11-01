@@ -117,6 +117,32 @@ fn hosts(config: Option<String>) -> Vec<String> {
     parse_hosts(&std::fs::read_to_string(path).unwrap_or_default())
 }
 
+// Fleet health: a cheap check of a saved server that is not on screen. `grep -c` prints 0 and exits 1
+// when nothing failed, so `|| true` keeps a healthy server from reading as an error.
+const HEALTH: &str = "systemctl --failed --no-legend --plain --no-pager 2>/dev/null | grep -c . || true\n";
+
+#[derive(serde::Serialize, Debug, PartialEq)]
+struct Health {
+    failed: u32,
+}
+
+fn parse_health(output: &str) -> Result<Health, AppError> {
+    output
+        .trim()
+        .parse()
+        .map(|failed| Health { failed })
+        .map_err(|_| AppError::new(ErrorKind::Remote, "Unexpected health check output"))
+}
+
+#[tauri::command]
+async fn server_health(target: Target) -> Result<Health, AppError> {
+    let opts = transport::RunOpts {
+        timeout: std::time::Duration::from_secs(10),
+        ..Default::default()
+    };
+    parse_health(&transport::run(&target, HEALTH, opts).await?)
+}
+
 #[tauri::command]
 async fn query(
     host: String,
@@ -187,6 +213,7 @@ fn main() {
             credentials::login_password_forget,
             credentials::login_password_saved,
             sudo::sudo_status,
+            server_health,
             terminal::terminal_open_kind,
             hosts,
             query,
@@ -230,6 +257,10 @@ mod tests {
         assert!(snapshot_script("snapshot_quick").unwrap().starts_with("QUICK=1\n"));
         assert!(!snapshot_script("snapshot").unwrap().contains("QUICK=1"));
         assert!(snapshot_script("other").is_none());
+        assert_eq!(parse_health("3\n").unwrap(), Health { failed: 3 });
+        assert_eq!(parse_health("0").unwrap(), Health { failed: 0 });
+        assert_eq!(parse_health("oops").unwrap_err().kind, ErrorKind::Remote);
+        assert!(HEALTH.contains("systemctl --failed") && HEALTH.contains("|| true"));
         assert!(SNAPSHOT.contains("echo @temps"));
         assert!(SNAPSHOT.contains("sensors -j 2>/dev/null"));
         assert!(SNAPSHOT.contains("/sys/class/thermal/thermal_zone*"));

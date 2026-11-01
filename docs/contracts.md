@@ -46,6 +46,7 @@ Mutations are never retried automatically.
 | login_password_forget | `target` | `null`. Removes the session and saved copies. |
 | login_password_saved | `target` | `boolean`. Never returns the password. |
 | connection_diagnose | `target` | `{ ok, error, log }`: runs `ssh -v … exit`; `log` is the redacted client log. |
+| server_health | `target` | `{ failed }`: count of failed systemd units, for the sidebar fleet list (10 s timeout). |
 | sudo_status | `target` | `"passwordless" \| "password" \| "none" \| "missing"`. |
 
 `ssh_config_save` takes `server: { alias, hostname, user, port, auth: "key" | "password", identityFile: string | null, jump: string | null }`.

@@ -376,3 +376,18 @@ button { text-box:trim-both cap alphabetic; }
 /* Long logs: the browser skips layout and paint for rows outside the scroll view (~2x faster at 400 rows),
    while every row stays in the DOM for search, filters and find. The size hint is one row plus its border. */
 .loglist > .logrow { content-visibility:auto;contain-intrinsic-size:auto 37px; }
+/* Fleet health: every saved server with a status dot; red for failed units, amber for reachability or login. */
+.fleet { list-style:none;margin:0;padding:0;display:grid;gap:2px;max-block-size:180px;overflow:auto;overscroll-behavior:contain;flex:none; }
+.fleet button { inline-size:100%;justify-content:flex-start;gap:var(--space-2);height:28px;padding:0 var(--space-2);border:0;background:transparent;font-size:var(--font-meta);font-weight:500;color:var(--ink); }
+.fleet button[aria-current="true"] { background:var(--control-hover); }
+.fleet-name { overflow:hidden;text-overflow:ellipsis; }
+.fleet-sum { margin-inline-start:auto;color:var(--muted);font-weight:400;white-space:nowrap; }
+.fleet-sum.failed { color:var(--bad); } .fleet-sum.warn { color:var(--notice-ink); }
+.health-dot { display:inline-block;inline-size:6px;block-size:6px;border-radius:50%;flex:none;background:var(--line);margin-inline-end:var(--space-2); }
+.fleet .health-dot { margin-inline-end:0; }
+.health-dot.ok { background:var(--good); } .health-dot.failed { background:var(--bad); } .health-dot.warn { background:var(--warning); }
+@media (hover:hover) { .fleet button:hover { background:var(--control-hover); } }
+.hostbox .host-mono { position:relative; }
+.hostbox[data-health] .host-mono::after { content:"";position:absolute;inset-block-start:-3px;inset-inline-end:-3px;inline-size:8px;block-size:8px;border-radius:50%;border:2px solid var(--card);background:var(--warning); }
+.hostbox[data-health="failed"] .host-mono::after { background:var(--bad); }
+@media (width <= 1000px) { .fleet { display:none; } }

@@ -73,6 +73,7 @@ export const loginPasswordSet = (target, password, remember) => invoke('login_pa
 export const loginPasswordForget = target => invoke('login_password_forget', { target });
 export const loginPasswordSaved = target => invoke('login_password_saved', { target });
 export const sudoStatus = target => invoke('sudo_status', { target });
+export const serverHealth = target => invoke('server_health', { target });
 export const terminalOpenKind = (target, kind, args, cols, rows, channel) => invoke('terminal_open_kind', { target, kind, args, cols, rows, channel });
 export const pickConfig = () => invoke('plugin:dialog|open', { options: { title: 'Choose SSH config', multiple: false, directory: false } });
 export const pickIdentity = () => invoke('plugin:dialog|open', { options: { title: 'Choose identity file', multiple: false, directory: false } });
