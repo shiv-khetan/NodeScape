@@ -137,3 +137,7 @@ footer a { color:inherit; }
 }
 figure.panel { margin:0; }
 figure.hero-shot { margin-block-end:var(--space-8); }
+
+/* Brand: the dot-grid N, as in the app. */
+.brand-mark .dot-logo { inline-size:22px; block-size:22px; fill:#fff; stroke:none; }
+.hero-logo { inline-size:72px; block-size:72px; margin-block-end:var(--space-4); }

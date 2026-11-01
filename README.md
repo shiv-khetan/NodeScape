@@ -1,3 +1,5 @@
+<p align="center"><img src="app-icon.svg" width="96" height="96" alt="NodeScape logo: a five by five grid of dots where the larger dots form the letter N"></p>
+
 # NodeScape
 
 NodeScape is a calm desktop control panel for Linux servers over plain SSH. It shows system
