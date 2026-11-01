@@ -1,5 +1,5 @@
 import * as backend from '../backend.js';
-import { esc } from './dom.js';
+import { esc, secretStore } from './dom.js';
 // Ask for a server login password. Resolves true once the backend holds it, false on Cancel.
 // The field is cleared as soon as it is read, and the value is never kept in the page.
 export function askLoginPassword({ server, target, refused = false }) {
@@ -13,7 +13,7 @@ export function askLoginPassword({ server, target, refused = false }) {
       + '<p>' + esc(refused ? 'Check the password and try again.' : server + ' asks for a password.') + '</p>'
       + '<label for="login-password">Password</label><input id="login-password" class="field" type="password" autocomplete="off" spellcheck="false" aria-describedby="login-error" required>'
       + '<p id="login-error" class="error" role="alert">' + (refused ? 'That password was refused.' : '') + '</p>'
-      + '<label class="confirm-check"><input type="checkbox" id="login-remember" checked>Remember on this computer (encrypted in Windows Credential Manager)</label>'
+      + '<label class="confirm-check"><input type="checkbox" id="login-remember" checked>Remember on this computer (encrypted in ' + secretStore + ')</label>'
       + '<div class="dlg-actions"><button type="button" class="pill" data-cancel>Cancel</button><button type="submit" class="pill primary">Connect</button></div></form>';
     const field = dialog.querySelector('#login-password'), error = dialog.querySelector('#login-error');
     let done = false;

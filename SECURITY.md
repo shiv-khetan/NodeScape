@@ -22,12 +22,12 @@ behavior and impact. Do not attach real SSH config, known_hosts, terminal record
 - Sudo passwords are transient: privileged actions request sudo per action and never store it.
 - Server login passwords are typed when connecting and held in memory for the session. With
   "Remember on this computer" they are saved in Windows Credential Manager (DPAPI-encrypted for
-  the Windows user, Local persistence so they never roam). No IPC command returns a saved
+  the Windows user, Local persistence so they never roam) or, on macOS, the login keychain. No IPC command returns a saved
   password; it is removed when the server refuses it or the profile is removed. For each SSH
   connection the password is passed only through the ssh child's environment to NodeScape's own
   askpass mode, which answers password prompts only (never key passphrases, host key questions
   or password changes). Jump hosts run with BatchMode and never receive it. Any process running
-  as the same Windows user can read Credential Manager and process environments, so this
+  as the same user can read process environments (and, on Windows, Credential Manager), so this
   protects against other users and offline disk access, not against same-user malware.
 - Profiles contain connection metadata. Their local confidentiality depends on OS access controls.
 - There is no telemetry or cloud backend. Network access is limited to SSH targets and

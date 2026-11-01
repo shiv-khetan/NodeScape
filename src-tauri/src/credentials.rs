@@ -1,6 +1,7 @@
 //! Server login passwords. Kept in memory for this app session and, when the user chooses
 //! "Remember", in Windows Credential Manager (encrypted for this Windows user, Local persistence so
-//! it never roams). There is deliberately no command that returns a saved password to the webview.
+//! it never roams) or the macOS login keychain. There is deliberately no command that returns a
+//! saved password to the webview.
 use crate::contracts::{AppError, ErrorKind, Target};
 use sha2::{Digest, Sha256};
 use std::{
@@ -116,16 +117,23 @@ pub fn login_password_saved(target: Target) -> bool {
     saved::load(&saved_name(&target)).is_some()
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod saved {
     use crate::contracts::{AppError, ErrorKind};
     use keyring_core::{api::CredentialStoreApi, Entry};
-    use std::collections::HashMap;
     use zeroize::Zeroizing;
 
+    #[cfg(windows)]
     fn entry(name: &str) -> keyring_core::Result<Entry> {
-        let modifiers = HashMap::from([("target", name), ("persistence", "Local")]);
+        let modifiers =
+            std::collections::HashMap::from([("target", name), ("persistence", "Local")]);
         windows_native_keyring_store::Store::new()?.build("NodeScape", "ssh", Some(&modifiers))
+    }
+
+    /// A generic password in the user's login keychain: service "NodeScape", account = entry name.
+    #[cfg(target_os = "macos")]
+    fn entry(name: &str) -> keyring_core::Result<Entry> {
+        apple_native_keyring_store::keychain::Store::new()?.build("NodeScape", name, None)
     }
 
     pub fn save(name: &str, password: &str) -> Result<(), AppError> {
@@ -151,15 +159,15 @@ mod saved {
     }
 }
 
-// ponytail: other platforms keep session memory only until a keychain store is wired in.
-#[cfg(not(windows))]
+// ponytail: Linux keeps session memory only; add a Secret Service store if Linux becomes a target.
+#[cfg(not(any(windows, target_os = "macos")))]
 mod saved {
     use crate::contracts::{AppError, ErrorKind};
     use zeroize::Zeroizing;
     pub fn save(_: &str, _: &str) -> Result<(), AppError> {
         Err(AppError::new(
             ErrorKind::Internal,
-            "Saving passwords is supported on Windows only",
+            "Saving passwords is supported on Windows and macOS only",
         ))
     }
     pub fn load(_: &str) -> Option<Zeroizing<String>> {

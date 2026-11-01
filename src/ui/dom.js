@@ -34,6 +34,11 @@ export function elapsed(value) {
   return +days ? +days + 'd ' + (+hours || 0) + 'h' : +hours ? +hours + 'h ' + +minutes + 'm' : +minutes ? +minutes + 'm' : +seconds + 's';
 }
 
+// Shortcut labels and where remembered passwords live differ on a Mac.
+export const isMac = /Mac/.test(navigator.platform);
+export const modKey = isMac ? '⌘' : 'Ctrl+';
+export const secretStore = isMac ? 'your macOS keychain' : 'Windows Credential Manager';
+
 export const agoLabel = s => (s >= 60 ? Math.round(s / 60) + 'm ago' : s + 's ago');
 
 // Page toolbars order search, filters, then actions; section tools stay in their panel header on pages with several tables.

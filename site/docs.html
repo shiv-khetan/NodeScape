@@ -40,8 +40,8 @@
     </div>
 <section id="install">
   <h2>Install</h2>
-  <p>Download the Windows installer from the <a data-repo="/releases/latest" href="https://github.com">latest release</a> and run it.</p>
-  <p>Windows needs Microsoft Edge WebView2 Runtime and the OpenSSH client available to your account.</p>
+  <p>Download the Windows installer or the macOS <code>.dmg</code> from the <a data-repo="/releases/latest" href="https://github.com">latest release</a> and run it.</p>
+  <p>Windows needs Microsoft Edge WebView2 Runtime and the OpenSSH client available to your account. macOS 11 or later includes OpenSSH. The macOS build is not signed yet: the first time, right-click NodeScape in Applications and choose Open.</p>
 </section>
 
 <section id="add-server">
@@ -61,9 +61,9 @@
 
 <section id="passwords">
   <h2>Password login and remembered passwords</h2>
-  <p>Enter the server login password when connecting. You can select “Remember on this computer” to save it encrypted in Windows Credential Manager. It uses Local persistence and does not roam.</p>
+  <p>Enter the server login password when connecting. You can select “Remember on this computer” to save it encrypted in Windows Credential Manager (Local persistence, does not roam) or the macOS login keychain.</p>
   <p>The password is never written to the SSH config. NodeScape forgets it if the server refuses it or you remove the server.</p>
-  <p class="note">Processes running as the same Windows user can read Credential Manager and process environments. A remembered password is not protected from those processes.</p>
+  <p class="note">Processes running as the same user can read process environments and, on Windows, Credential Manager. A remembered password is not protected from those processes.</p>
 </section>
 
 <section id="pages">
@@ -112,6 +112,7 @@
 
 <section id="shortcuts">
   <h2>Keyboard shortcuts</h2>
+  <p>On a Mac, use <kbd>⌘</kbd> wherever this table says <kbd>Ctrl</kbd>.</p>
   <div class="table-wrap"><table>
     <thead>
       <tr>
@@ -196,7 +197,7 @@
 
 <section id="build">
   <h2>Build from source and run tests</h2>
-  <p>Install Node.js 22+, stable Rust, and the platform’s Tauri build prerequisites. On Windows, these include Visual Studio C++ Build Tools, the Windows SDK, and WebView2.</p>
+  <p>Install Node.js 22+, stable Rust, and the platform’s Tauri build prerequisites. On Windows, these include Visual Studio C++ Build Tools, the Windows SDK, and WebView2. On macOS, install the Xcode Command Line Tools.</p>
   <p>On Ubuntu, install the required packages:</p>
   <pre><code>sudo apt-get install build-essential libwebkit2gtk-4.1-dev libssl-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf</code></pre>
   <p>From your checkout, run:</p>
@@ -220,9 +221,9 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings</
   <h2>Security model</h2>
   <ul>
     <li>System OpenSSH handles keys, agents, SSH config, and known hosts. Check fingerprints before approving first contact and investigate changed keys.</li>
-    <li>Login passwords can be remembered in Windows Credential Manager. Sudo passwords are requested per action and never stored.</li>
+    <li>Login passwords can be remembered in Windows Credential Manager or the macOS keychain. Sudo passwords are requested per action and never stored.</li>
     <li>NodeScape validates inputs and limits application commands. The interactive terminal permits remote shell use.</li>
-    <li>The local Windows account, SSH configuration, agent, and selected identity files are trusted.</li>
+    <li>The local user account, SSH configuration, agent, and selected identity files are trusted.</li>
     <li>There is no telemetry or cloud backend. The app can work without internet access when the SSH server is reachable.</li>
   </ul>
   <p>For reporting guidance and threat boundaries, see <a data-repo="/blob/main/SECURITY.md" href="https://github.com">SECURITY.md</a>.</p>

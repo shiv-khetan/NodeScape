@@ -42,7 +42,7 @@ Mutations are never retried automatically.
 
 | Command | Arguments | Returns |
 | --- | --- | --- |
-| login_password_set | `login: { target, password, remember }` | `null`. Holds the password for the session; `remember` also saves it in Windows Credential Manager (Local persistence). |
+| login_password_set | `login: { target, password, remember }` | `null`. Holds the password for the session; `remember` also saves it in Windows Credential Manager (Local persistence) or the macOS login keychain. |
 | login_password_forget | `target` | `null`. Removes the session and saved copies. |
 | login_password_saved | `target` | `boolean`. Never returns the password. |
 | connection_diagnose | `target` | `{ ok, error, log }`: runs `ssh -v … exit`; `log` is the redacted client log. |

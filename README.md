@@ -27,17 +27,20 @@ Screenshots use built-in demo data; every name and address in them is made up.
   N failed, unreachable, needs login), checked every two minutes.
 - **Key or password login.** Add a server by host or IP, port and user, with an SSH key or a
   password and an optional jump host. Passwords can be remembered, encrypted in Windows
-  Credential Manager. Failures explain themselves, and Show details runs `ssh -v`.
+  Credential Manager or the macOS keychain. Failures explain themselves, and Show details runs `ssh -v`.
 - **Safe admin actions.** Confirmations name the server, scope and sudo need. Sudo passwords
   are used once. Stopping the units your connection depends on needs an explicit confirmation.
 - **Keyboard first.** <kbd>Ctrl</kbd>+<kbd>K</kbd> command palette, <kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>9</kbd>
-  pages, <kbd>/</kbd> to search, arrow keys through tables.
+  pages, <kbd>/</kbd> to search, arrow keys through tables (<kbd>⌘</kbd> on a Mac).
 
 ## Install
 
-Download the Windows installer from this repository's Releases page and run it.
+Download the Windows installer or the macOS `.dmg` from this repository's Releases page.
 Windows needs Microsoft Edge WebView2 Runtime and the OpenSSH client available to your
-account. Windows is the primary desktop target; Linux CI checks compilation and tests,
+account. macOS 11 or later includes OpenSSH. The macOS build is not signed yet, so the first
+time, right-click NodeScape in Applications and choose Open (or run
+`xattr -dr com.apple.quarantine /Applications/NodeScape.app`).
+Windows and macOS are the desktop targets; Linux CI checks compilation and tests,
 but native Linux installer and desktop behavior still need manual verification.
 
 ## First run
@@ -53,7 +56,7 @@ but native Linux installer and desktop behavior still need manual verification.
 
 Key logins work through your SSH agent or key files. Password logins are typed when you
 connect; tick "Remember on this computer" to keep the password encrypted in Windows
-Credential Manager. Profiles store names, targets and config paths, never private keys.
+Credential Manager or the macOS login keychain. Profiles store names, targets and config paths, never private keys.
 Files opens the SSH account's home directory.
 Linux tools such as systemctl, journalctl, ip and sensors provide the displayed data;
 missing tools or permissions appear as unavailable. Network inspection is read-only.
@@ -62,6 +65,7 @@ missing tools or permissions appear as unavailable. Network inspection is read-o
 
 Install Node.js 22+, stable Rust, and the platform's Tauri build prerequisites.
 On Windows these include Visual Studio C++ Build Tools, the Windows SDK and WebView2.
+On macOS install the Xcode Command Line Tools (`xcode-select --install`).
 On Ubuntu install:
 
 ```sh
@@ -132,7 +136,8 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 - Sudo passwords are requested per action, sent over stdin for a fixed validated operation
   and discarded. Mutations are never automatically retried.
 - Login passwords are held in memory for the session and, only if you choose, saved
-  encrypted in Windows Credential Manager (Local persistence, never roaming). ssh receives
+  encrypted in Windows Credential Manager (Local persistence, never roaming) or the macOS
+  login keychain. ssh receives
   them through NodeScape's own askpass mode, which answers password prompts only. No IPC
   command returns a saved password.
 - Rust validates IPC inputs. Application commands are enrolled in an ACL manifest and granted

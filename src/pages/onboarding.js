@@ -1,6 +1,6 @@
 import * as backend from '../backend.js';
 import { state } from '../state.js';
-import { esc, head } from '../ui/dom.js';
+import { esc, head, secretStore } from '../ui/dom.js';
 import { createTerminal } from '../ui/terminal.js';
 import { errorAdvice, passwordError, showDetails } from '../ui/errors.js';
 
@@ -35,7 +35,7 @@ function draw(s) {
       '<div>'+field('setup-alias','Alias',s.alias,'required placeholder="workshop"')+'</div><div>'+field('setup-hostname','Hostname or IP address',s.hostname,'required placeholder="box.example or 192.0.2.10"')+'</div><div>'+field('setup-user','SSH user',s.user,'required autocomplete="off"')+'</div><div>'+field('setup-port','Port',s.port,'required type="number" min="1" max="65535"')+'</div>'
       +'<div class="setup-wide"><span class="field-label" id="auth-label">Authentication</span><div class="segtabs" role="group" aria-label="Authentication">'+['key','password'].map(a=>'<button type="button" data-action="auth-'+a+'" class="'+(s.auth===a?'on':'')+'" aria-pressed="'+(s.auth===a)+'">'+(a==='key'?'SSH key':'Password')+'</button>').join('')+'</div></div>'
       +(s.auth==='key' ? '<div class="setup-wide">'+field('setup-identity','Identity file',s.identity,'required placeholder="Absolute path to a private key"')+'<div class="setup-actions">'+button('Choose existing key','identity')+button('New key path','new-path')+button('Generate key','keygen')+'</div><p>To generate a key, choose a new file path. Enter its passphrase only in the terminal below.</p></div>'
-        : '<p class="setup-wide">You type the password when you connect. NodeScape can remember it, encrypted in Windows Credential Manager for your Windows account. It is never written to the SSH config.</p>')
+        : '<p class="setup-wide">You type the password when you connect. NodeScape can remember it, encrypted in '+secretStore+'. It is never written to the SSH config.</p>')
       +'<details class="setup-wide setup-advanced"'+(s.jump?' open':'')+'><summary>Advanced</summary>'+field('setup-jump','Jump host',s.jump,'placeholder="user@bastion.example:22 (optional, one hop)"')+'</details>')+'</div><div data-setup-terminal></div><div class="setup-actions">'+button('Back','back')+'<button class="pill primary" type="submit" '+(s.generating?'disabled':'')+'>Continue</button></div></form>';
     panel.querySelector('[data-details]').onsubmit = async event => {
       event.preventDefault(); capture(s); await attempt(s, async () => {
@@ -54,7 +54,7 @@ function draw(s) {
     const askPassword = !s.tested && (s.auth === 'password' || s.needsPassword);
     const who = s.mode === 'new' ? s.user + '@' + s.hostname : s.target.host;
     panel.innerHTML = '<h2>Test your connection</h2><p>Check the login with strict host key verification. You can save the server after this succeeds.</p><p><b>'+esc(s.name)+'</b> · '+esc(s.target.host)+'</p>'
-      +(askPassword ? '<div class="setup-fields"><div class="setup-wide"><label for="setup-login">Password for '+esc(who)+'</label><input class="field" id="setup-login" type="password" autocomplete="off" spellcheck="false"><label class="confirm-check"><input type="checkbox" id="setup-remember" checked>Remember on this computer (encrypted in Windows Credential Manager)</label></div></div>' : '')
+      +(askPassword ? '<div class="setup-fields"><div class="setup-wide"><label for="setup-login">Password for '+esc(who)+'</label><input class="field" id="setup-login" type="password" autocomplete="off" spellcheck="false"><label class="confirm-check"><input type="checkbox" id="setup-remember" checked>Remember on this computer (encrypted in '+secretStore+')</label></div></div>' : '')
       +'<p data-test-status role="status">'+esc(s.testStatus || (s.tested?'Connection successful.':'Ready to test.'))+'</p><div class="setup-actions">'+button('Back','back')+button('Test connection','test')+(s.testFailed ? button('Show details','details') : '')+'<button class="pill primary" data-action="save" '+(!s.tested?'disabled':'')+'>Save server</button></div><div data-test-details></div>';
   }
   panel.querySelector('[data-details]')?.addEventListener('input', () => capture(s));
