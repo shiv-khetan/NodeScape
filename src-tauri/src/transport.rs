@@ -428,11 +428,11 @@ async fn capture(
         if count == 0 {
             return Ok(output);
         }
+        // Both streams share one budget; the call fails as soon as it is exceeded.
         if captured
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |size| {
-                size.checked_add(count).filter(|total| *total <= limit)
-            })
-            .is_err()
+            .fetch_add(count, Ordering::Relaxed)
+            .saturating_add(count)
+            > limit
         {
             return Err(AppError::new(ErrorKind::Remote, "output too large"));
         }

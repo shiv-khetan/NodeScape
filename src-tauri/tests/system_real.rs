@@ -120,7 +120,8 @@ async fn snapshot_contains_temperatures_and_groups() {
         assert!(readings > 0, "sensors JSON without temperature readings");
     } else {
         assert_eq!(temps.len() % 2, 0, "incomplete thermal zone pair");
-        for pair in temps.chunks_exact(2) {
+        let (pairs, _) = temps.as_chunks::<2>();
+        for pair in pairs {
             let value: f64 = pair[1].parse().expect("non-numeric thermal zone");
             assert!(
                 (-273150.0..=500000.0).contains(&value),
