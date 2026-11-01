@@ -3,6 +3,8 @@ import { state, store, beginRequest, isCurrent, selectProfile, acceptSnapshot } 
 import { initMenus } from './ui/menu.js';
 import { cancelConfirm } from './ui/confirm.js';
 import { initShortcuts } from './ui/shortcuts.js';
+import { morphChildren } from './ui/morph.js';
+import { initSettings, migrateLegacyHost } from './ui/settings.js';
 import { $, esc, head, agoLabel } from './ui/dom.js';
 import { showError, passwordError, renderUnreachable, markStale } from './ui/errors.js';
 import { askLoginPassword } from './ui/connect.js';
@@ -28,7 +30,8 @@ const routes = {
   network: { page: network, load: target => backend.networkRead(target) },
   terminal: { page: terminal, load: async () => '' },
   files: { page: files, load: target => files.load(target) },
-  overview: { page: overview, load: target => backend.query(target, 'snapshot'), snapshot: true },
+  // After a recent snapshot, skip the 0.5 s sampling sleep and diff against its counters instead.
+  overview: { page: overview, load: target => backend.query(target, state.snap?.raw && Date.now() - state.snapshotAt < 30000 ? 'snapshot_quick' : 'snapshot'), snapshot: true },
   services: { page: services, load: target => backend.servicesRead(target) },
   processes: { page: processes, load: target => backend.query(target, 'processes') },
   logs: { page: logs, load: target => backend.logs(target, state.logUnit || null, state.logLines) },
@@ -73,9 +76,16 @@ async function refresh(fromTimer) {
     const text = await route.load(request.target);
     // Reject stale reads before parsing or touching snapshots and chart history.
     if (!isCurrent(request)) return;
-    const data = route.snapshot ? parseSnapshot(text, request.target.host) : text;
+    const data = route.snapshot ? parseSnapshot(text, request.target.host, state.snap?.raw) : text;
     if (route.snapshot) acceptSnapshot(request, data);
     const focused = document.activeElement?.id;
+    if (route.page.morphable && mounted === route.page && main.dataset.page === request.view && !main.querySelector('.stale, .action-alert')) {
+      const next = document.createElement('div');
+      next.innerHTML = route.page.render(data);
+      morphChildren(main, next);
+      lastReached[request.target.host] = Date.now();
+      return;
+    }
     dispose();
     main.innerHTML = route.page.render(data);
     main.dataset.page = request.view;
@@ -164,28 +174,12 @@ async function profilesChanged(profile, open = false) {
   terminal.targetChanged();
   go(open ? 'overview' : 'servers');
 }
-const dialog = $('#settings');
-$('#settingsBtn').addEventListener('click', () => {
-  $('#sshConfig').value = state.defaultConfig || '';
-  dialog.showModal();
-});
-dialog.addEventListener('close', () => {
-  if (dialog.returnValue !== 'save') return;
-  state.defaultConfig = $('#sshConfig').value.trim().replace(/^"(.*)"$/, '$1') || null;
-  store('defaultSshConfig', state.defaultConfig || '');
-});
+initSettings();
 async function start() {
   if (!backend.available()) { refresh(); return; }
   try {
     await loadProfiles();
-    if (store('profilesMigrated') !== '1') {
-      const host = store('host');
-      if (!state.profiles.length && host && host !== 'demo') {
-        await backend.profileSave({id:'',name:host,host,config:store('sshConfig') || null});
-        await loadProfiles();
-      }
-      store('profilesMigrated', '1');
-    }
+    await migrateLegacyHost(loadProfiles);
     selectProfile(state.profiles.find(p => p.id === store('selectedProfile')) || state.profiles[0]);
     hostInput.value = state.profileId;
     refresh();

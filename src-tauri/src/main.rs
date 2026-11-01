@@ -21,11 +21,12 @@ use contracts::{valid_unit, AppError, ErrorKind, Target};
 use std::path::{Path, PathBuf};
 
 // CPU and network are sampled first, before the script prints anything, so the app's own SSH output
-// doesn't show up as network traffic.
+// doesn't show up as network traffic. QUICK=1 (live refreshes) takes one sample and skips the 0.5 s
+// sleep; the frontend diffs it against the previous snapshot's counters and server uptime instead.
 const SNAPSHOT: &str = r#"
 echo @rx1; tail -n +3 /proc/net/dev
-echo @cpu; head -1 /proc/stat; sleep 0.5; head -1 /proc/stat
-echo @rx2; tail -n +3 /proc/net/dev
+echo @cpu; head -1 /proc/stat; [ -n "$QUICK" ] || { sleep 0.5; head -1 /proc/stat; }
+[ -n "$QUICK" ] || { echo @rx2; tail -n +3 /proc/net/dev; }
 echo @gw; ip route show default 2>/dev/null
 echo @conn; echo "$SSH_CONNECTION"
 echo @host; hostname
@@ -124,12 +125,20 @@ async fn query(
     operation_id: Option<String>,
 ) -> Result<String, AppError> {
     let script = match what.as_str() {
-        "snapshot" => SNAPSHOT,
-        "processes" => PROCESSES,
-        "timers" => TIMERS,
-        _ => return Err(AppError::new(ErrorKind::InvalidInput, "unknown query")),
+        "processes" => PROCESSES.into(),
+        "timers" => TIMERS.into(),
+        other => snapshot_script(other)
+            .ok_or_else(|| AppError::new(ErrorKind::InvalidInput, "unknown query"))?,
     };
-    run(host, config, script.into(), operation_id).await
+    run(host, config, script, operation_id).await
+}
+
+fn snapshot_script(what: &str) -> Option<String> {
+    match what {
+        "snapshot" => Some(SNAPSHOT.into()),
+        "snapshot_quick" => Some(format!("QUICK=1\n{SNAPSHOT}")),
+        _ => None,
+    }
 }
 
 #[tauri::command]
@@ -215,6 +224,12 @@ mod tests {
 
     #[test]
     fn snapshot_includes_system_sections() {
+        // Live refreshes skip the 0.5 s CPU/network sampling sleep; the frontend diffs against the last sample.
+        assert!(SNAPSHOT.contains("[ -n \"$QUICK\" ] || { sleep 0.5; head -1 /proc/stat; }"));
+        assert!(SNAPSHOT.contains("[ -n \"$QUICK\" ] || { echo @rx2; tail -n +3 /proc/net/dev; }"));
+        assert!(snapshot_script("snapshot_quick").unwrap().starts_with("QUICK=1\n"));
+        assert!(!snapshot_script("snapshot").unwrap().contains("QUICK=1"));
+        assert!(snapshot_script("other").is_none());
         assert!(SNAPSHOT.contains("echo @temps"));
         assert!(SNAPSHOT.contains("sensors -j 2>/dev/null"));
         assert!(SNAPSHOT.contains("/sys/class/thermal/thermal_zone*"));

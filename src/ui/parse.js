@@ -67,7 +67,7 @@ function netCounters(lines = [], devs = []) {
   }
   return counters;
 }
-function netRate(first, last, index) {
+function netRate(first, last, index, seconds) {
   if (!first.size || first.size !== last.size) return null;
   let delta = 0;
   for (const [dev, counters] of first) {
@@ -75,12 +75,17 @@ function netRate(first, last, index) {
     if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b < a) return null;
     delta += b - a;
   }
-  return delta * 2; // sampled 0.5s apart
+  return seconds > 0 ? delta / seconds : null;
 }
 
-export function parseSnapshot(txt, fallbackHost) {
+// Full snapshots carry two samples 0.5 s apart. Quick ones carry one, diffed against `prev` (the last
+// snapshot's raw counters), timed by server uptime so the interval is exact and a reboot reads as no data.
+export function parseSnapshot(txt, fallbackHost, prev = null) {
   const s = sections(txt);
-  const [a, b] = (s.cpu || []).map(l => words(l).slice(1, 9).map(Number));
+  const samples = (s.cpu || []).map(l => words(l).slice(1, 9).map(Number));
+  const up = parseFloat(s.uptime?.[0]) || 0;
+  const later = prev && up > prev.up;
+  const [a, b] = samples.length >= 2 ? samples : [later ? prev.cpu : null, samples[0]];
   let cpu = null;
   if (a?.length === 8 && b?.length === 8 && a.every((v, i) => Number.isFinite(v) && v >= 0 && Number.isFinite(b[i]) && b[i] >= v)) {
     const delta = b.map((v, i) => v - a[i]);
@@ -92,7 +97,8 @@ export function parseSnapshot(txt, fallbackHost) {
     return line ? words(line).slice(1).map(Number) : [];
   };
   const devs = (s.gw || []).map(l => l.match(/\bdev (\S+)/)?.[1]).filter(Boolean);
-  const first = netCounters(s.rx1, devs), last = netCounters(s.rx2, devs);
+  const now = netCounters(s.rx1, devs);
+  const [first, last, seconds] = s.rx2 ? [now, netCounters(s.rx2, devs), 0.5] : [later ? prev.net : new Map(), now, later ? up - prev.up : 0];
   return {
     host: s.host?.[0]?.trim() || fallbackHost,
     os: s.os?.[0], kernel: s.kernel?.[0],
@@ -105,7 +111,8 @@ export function parseSnapshot(txt, fallbackHost) {
     }),
     cpus: /^\d+$/.test(s.cpus?.[0]?.trim()) && +s.cpus[0] > 0 ? +s.cpus[0] : null,
     cpu, mem: row('Mem:'), swap: row('Swap:'),
-    rx: netRate(first, last, 0), tx: netRate(first, last, 1),
+    rx: netRate(first, last, 0, seconds), tx: netRate(first, last, 1, seconds),
+    raw: { cpu: samples.at(-1), net: last, up },
     disks: (s.disk || []).map(l => {
       // Target is last so mount points may contain spaces.
       const match = l.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);

@@ -132,6 +132,62 @@ pub async fn diagnose(target: &Target, mut opts: RunOpts) -> Diagnosis {
     }
 }
 
+/// `ssh -G` (the ProxyJump lookup) runs before every connection; cache its answer briefly.
+/// The key includes the ssh program, config path and the config file's size and modification time,
+/// so editing the config is picked up at once. ponytail: Include'd files only refresh after the TTL.
+const PROXY_TTL: Duration = Duration::from_secs(60);
+type ProxyCache = Mutex<HashMap<String, (std::time::Instant, Option<String>)>>;
+
+fn proxy_cache() -> &'static ProxyCache {
+    static CACHE: OnceLock<ProxyCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn proxy_cache_key(target: &Target, opts: &RunOpts) -> String {
+    let config = selected_config(target).map(PathBuf::from).or_else(|| {
+        std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .map(|home| Path::new(&home).join(".ssh").join("config"))
+    });
+    let stamp = config
+        .as_deref()
+        .and_then(|path| std::fs::metadata(path).ok())
+        .map(|m| format!("{}:{:?}", m.len(), m.modified().ok()))
+        .unwrap_or_default();
+    format!(
+        "{}\0{}\0{}\0{}",
+        opts.ssh_program.display(),
+        selected_config(target).unwrap_or(""),
+        target.host,
+        stamp
+    )
+}
+
+/// The ProxyJump value for this target ("none" filtered out), from cache or a fresh `ssh -G`.
+async fn proxy_jump(
+    target: &Target,
+    opts: &RunOpts,
+    deadline: Instant,
+    cancelled: &mut watch::Receiver<bool>,
+) -> Result<Option<String>, AppError> {
+    let key = proxy_cache_key(target, opts);
+    if let Some((at, jump)) = proxy_cache().lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+        if at.elapsed() < PROXY_TTL {
+            return Ok(jump.clone());
+        }
+    }
+    let config = invoke(target, None, opts, None, deadline, cancelled).await?;
+    let jump = config
+        .lines()
+        .find_map(|line| line.strip_prefix("proxyjump "))
+        .filter(|jump| !jump.eq_ignore_ascii_case("none"))
+        .map(str::to_owned);
+    proxy_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, (std::time::Instant::now(), jump.clone()));
+    Ok(jump)
+}
+
 type Operations = Mutex<HashMap<String, watch::Sender<bool>>>;
 
 fn operations() -> &'static Operations {
@@ -389,20 +445,17 @@ pub(crate) async fn execute(
     // Keep the channel open for calls without an operation id too.
     let _sender = sender;
     let proxy = if script.is_some() {
-        let config = invoke(target, None, &opts, None, deadline, &mut cancelled).await?;
-        let jump = config
-            .lines()
-            .find_map(|line| line.strip_prefix("proxyjump "))
-            .filter(|jump| !jump.eq_ignore_ascii_case("none"));
-        jump.map(|jump| {
-            proxy_command(
-                target,
-                &opts.ssh_program,
-                jump,
-                opts.known_hosts_file.as_deref(),
-            )
-        })
-        .transpose()?
+        proxy_jump(target, &opts, deadline, &mut cancelled)
+            .await?
+            .map(|jump| {
+                proxy_command(
+                    target,
+                    &opts.ssh_program,
+                    &jump,
+                    opts.known_hosts_file.as_deref(),
+                )
+            })
+            .transpose()?
     } else {
         None
     };
@@ -584,16 +637,13 @@ pub async fn spawn_subsystem(
     validate(target)?;
     let (sender, mut cancelled) = watch::channel(false);
     let registration = Registration::new(opts.operation_id.clone(), sender.clone())?;
-    let config = invoke(target, None, &opts, None, deadline, &mut cancelled).await?;
-    let proxy = config
-        .lines()
-        .find_map(|line| line.strip_prefix("proxyjump "))
-        .filter(|jump| !jump.eq_ignore_ascii_case("none"))
+    let proxy = proxy_jump(target, &opts, deadline, &mut cancelled)
+        .await?
         .map(|jump| {
             proxy_command(
                 target,
                 &opts.ssh_program,
-                jump,
+                &jump,
                 opts.known_hosts_file.as_deref(),
             )
         })

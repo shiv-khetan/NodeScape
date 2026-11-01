@@ -578,3 +578,31 @@ async fn diagnose_returns_the_verbose_log_and_a_typed_reason() {
     assert!(ok.ok && ok.error.is_none());
     assert!(ok.log.contains("Authenticated to verbose-ok"));
 }
+
+#[tokio::test]
+async fn ssh_config_lookups_are_cached_per_target_and_config_version() {
+    let host = format!("countg-{}", std::process::id());
+    let log = std::env::temp_dir().join(format!("nodescape-fake-{host}.log"));
+    let _ = std::fs::remove_file(&log);
+    let lookups = || std::fs::read_to_string(&log).map(|t| t.lines().count()).unwrap_or(0);
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config");
+    std::fs::write(&config, "# one").unwrap();
+    let with_config = Target { host: host.clone(), config: Some(config.to_string_lossy().into()) };
+
+    for _ in 0..3 {
+        assert_eq!(run(&with_config, "true", opts()).await.unwrap(), "ran");
+    }
+    assert_eq!(lookups(), 1, "repeat calls reuse the ssh -G result");
+
+    // Editing the config file is a new version, so it is read again.
+    std::thread::sleep(Duration::from_millis(20));
+    std::fs::write(&config, "# two, longer").unwrap();
+    run(&with_config, "true", opts()).await.unwrap();
+    assert_eq!(lookups(), 2);
+
+    // The same alias under the default config is a different cache entry.
+    run(&target(&host), "true", opts()).await.unwrap();
+    assert_eq!(lookups(), 3);
+    let _ = std::fs::remove_file(&log);
+}

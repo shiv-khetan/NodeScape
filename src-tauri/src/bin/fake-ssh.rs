@@ -36,6 +36,13 @@ fn main() {
         args.last().map(String::as_str).unwrap_or("echo")
     };
     if args.iter().any(|arg| arg == "-G") {
+        // Count config lookups so tests can prove they are cached.
+        if host.starts_with("countg-") {
+            use std::io::Write as _;
+            let log = std::env::temp_dir().join(format!("nodescape-fake-{host}.log"));
+            let mut file = std::fs::OpenOptions::new().create(true).append(true).open(log).unwrap();
+            writeln!(file, "-G").unwrap();
+        }
         match host {
             "config-stall" => stall(),
             "config-flood" => {
@@ -106,6 +113,7 @@ fn main() {
             io::stderr().write_all(&[b'e'; 40_000]).unwrap();
             io::copy(&mut io::stdin(), &mut io::sink()).unwrap();
         }
+        host if host.starts_with("countg-") => print!("ran"),
         "args" | "jump-one" | "jump-port" => {
             for arg in &args {
                 println!("{arg}");

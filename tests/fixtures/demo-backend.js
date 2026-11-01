@@ -49,7 +49,10 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
   const netDev = () => `    lo: 9000000 1 0 0 0 0 0 0 9000000 1 0 0 0 0 0 0\nenp3s0: ${Math.round(rx)} 1 0 0 0 0 0 0 ${Math.round(tx)} 1 0 0 0 0 0 0`;
   const statLine = () => `cpu  ${Math.round(busy)} 0 0 ${Math.round(idle)} 0 0 0 0 0 0`;
 
-  function snapshot() {
+  // Each snapshot advances the server clock by the 0.5 s its counters move, so quick deltas match full samples.
+  let clock = 0;
+  function snapshot(quick = false) {
+    clock += 0.5;
     cpu = clamp(cpu + rnd(-14, 14), 3, 94);
     memUsed = clamp(memUsed + rnd(-0.3, 0.3) * GB, 4 * GB, 12 * GB);
     const rx1 = netDev(), a = statLine();
@@ -60,7 +63,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     return [
       '@host', 'nas-01', '@os', 'Debian GNU/Linux 12 (bookworm)', '@kernel', '6.1.0-26-amd64',
       '@ip', '10.0.0.2 10.0.0.3',
-      '@uptime', `${(now - boot) / 1000} 0`,
+      '@uptime', `${(now - boot) / 1000 + clock} 0`,
       '@load', `${l1} 1.84 1.52 2/412 9911`, '@cpus', '8',
       '@mem', '              total        used        free      shared  buff/cache   available',
       `Mem: ${total} ${Math.round(memUsed)} ${Math.round(free)} 1 ${cache} ${Math.round(total - memUsed)}`,
@@ -71,7 +74,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
       '@net', 'lo UNKNOWN 127.0.0.1/8 ::1/128', 'enp3s0 UP 10.0.0.2/24', 'tailscale0 UP 10.0.0.3/32', 'docker0 DOWN 172.17.0.1/16',
       '@svc', ...units.map(u => `${u.unit} loaded ${active(u)} ${u.sub} ${u.desc}`),
       '@log', ...Array.from({ length: 12 }, (_, i) => logLine(now - (12 - i) * 47e3, i)),
-      '@rx1', rx1, '@cpu', a, statLine(), '@rx2', netDev(),
+      '@rx1', rx1, '@cpu', a, ...(quick ? [] : [statLine(), '@rx2', netDev()]),
       '@gw', 'default via 10.0.0.1 dev enp3s0 proto dhcp metric 100', '@conn', '10.0.0.9 52211 10.0.0.3 22',
     ].join('\n');
   }
@@ -287,7 +290,9 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
     if (cmd === 'services_read' && responses?.[args.target.host + ':services_read'] === undefined && responses?.services_read === undefined) return servicesFixture(args.target);
     if (responses !== null) {
       const key = cmd === 'query' ? args.what : cmd;
-      const supplied = responses[(args.target?.host ?? args.host) + ':' + key] ?? responses[key];
+      const pick = k => responses[(args.target?.host ?? args.host) + ':' + k] ?? responses[k];
+      // Tests that supply a snapshot answer the quick variant with it too.
+      const supplied = pick(key) ?? (key === 'snapshot_quick' ? pick('snapshot') : undefined);
       // A list of responses answers successive calls (the last one repeats).
       const value = (['service_action', 'account_action'].includes(cmd) || cmd === 'query') && Array.isArray(supplied) ? (supplied.length > 1 ? supplied.shift() : supplied[0]) : supplied;
       if (value?.defer) await new Promise(resolve => window.__pending.push(resolve));
@@ -314,7 +319,7 @@ window.installDemoBackend = ({ responses = null, host = 'nas-01', profiles: init
       else u.sub = args.action === 'stop' ? 'dead' : 'running';
       return 'ok';
     }
-    const collect = cmd === 'query' && { snapshot, processes, timers }[args.what];
+    const collect = cmd === 'query' && { snapshot, snapshot_quick: () => snapshot(true), processes, timers }[args.what];
     if (!collect) throw { kind: 'invalid_input', message: 'Unknown command' };
     return collect();
   } } };

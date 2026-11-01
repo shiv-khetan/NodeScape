@@ -162,7 +162,7 @@ test('a target change while confirmation is open cancels the service mutation', 
 });
 
 test('error recovery retains old data, retries and opens the selected editor',async({page})=>{
-  await page.evaluate(()=>{const invoke=window.__TAURI__.core.invoke;window.__TAURI__.core.invoke=(cmd,args)=>cmd==='query'&&args.what==='snapshot'?Promise.reject({kind:'timeout',message:'ssh: synthetic connection timed out'}):invoke(cmd,args);});
+  await page.evaluate(()=>{const invoke=window.__TAURI__.core.invoke;window.__TAURI__.core.invoke=(cmd,args)=>cmd==='query'&&args.what.startsWith('snapshot')?Promise.reject({kind:'timeout',message:'ssh: synthetic connection timed out'}):invoke(cmd,args);});
   await page.locator('#refresh').click();await expect(page.locator('.action-alert')).toContainText('ssh: synthetic connection timed out');
   await expect(page.locator('[data-freshness]')).toContainText('refresh failed');
   await page.locator('#refresh').click();await expect(page.locator('.action-alert')).toContainText('ssh: synthetic connection timed out');

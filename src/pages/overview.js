@@ -5,6 +5,8 @@ import { stepChart, dotCard } from '../ui/charts.js';
 
 import { performServiceAction } from './services.js';
 
+// Live refreshes update this page in place (see ui/morph.js).
+export const morphable = true;
 export const meterClass = value => value >= 95 ? 'hot' : value >= 85 ? 'warm' : 'neutral';
 export function freshness() {
   const ago = agoLabel(Math.max(0, Math.floor((Date.now() - state.snapshotAt) / 1000)));
