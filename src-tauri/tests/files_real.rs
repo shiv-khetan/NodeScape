@@ -122,6 +122,8 @@ async fn subsystem_uses_binary_pipes_config_strict_options_and_cancel_registry()
     let mut process = transport::spawn_subsystem(&target, "sftp", options)
         .await
         .unwrap();
+    // Done sending, as an SFTP client would be; fake ssh prints its argv after stdin closes.
+    drop(process.stdin.take());
     let mut text = String::new();
     process
         .stdout
