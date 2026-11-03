@@ -214,7 +214,7 @@ npm run test:app</code></pre>
   <p><code>npm test</code> uses a local HTTP server and synthetic fixtures. <code>npm run test:app</code> is a separate Windows and WebView2 test project.</p>
   <p>For additional release checks, run:</p>
   <pre><code>cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings</code></pre>
+cargo clippy --features fake-ssh --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings</code></pre>
 </section>
 
 <section id="security">

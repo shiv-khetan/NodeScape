@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo clippy --locked --features fake-ssh --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --locked --features fake-ssh --manifest-path src-tauri/Cargo.toml
       - run: npm run check:release
       - run: npm test

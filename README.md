@@ -117,7 +117,7 @@ Settings and host output must never be committed; app tests disable traces, vide
 Rust real-SSH integration tests are ignored by default. With the same local settings:
 
 ```sh
-cargo test --manifest-path src-tauri/Cargo.toml -- --ignored
+cargo test --features fake-ssh --manifest-path src-tauri/Cargo.toml -- --ignored
 ```
 
 Some Rust integration tests create and remove files inside the configured test directory;
@@ -126,7 +126,7 @@ Additional release checks:
 
 ```sh
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo clippy --features fake-ssh --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
 ## Security model

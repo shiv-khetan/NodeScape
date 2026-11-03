@@ -8,11 +8,24 @@ authors = ["Shivam Khetan"]
 # Keep the test helper from ever being selected as the application.
 default-run = "nodescape"
 
+# Test helper: behind a feature so release bundles never ship it. Run tests with --features fake-ssh.
+[features]
+fake-ssh = []
+
 [[bin]]
 name = "fake-ssh"
 path = "src/bin/fake-ssh.rs"
 test = false
 bench = false
+required-features = ["fake-ssh"]
+
+[[test]]
+name = "transport"
+required-features = ["fake-ssh"]
+
+[[test]]
+name = "files_real"
+required-features = ["fake-ssh"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
