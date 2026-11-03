@@ -34,4 +34,5 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: NodeScape ${{ github.ref_name }}
           releaseDraft: true
+          tauriScript: npx tauri
           args: ${{ matrix.args }}
