@@ -39,7 +39,7 @@ test('Ctrl+number opens pages, Ctrl+R refreshes, / focuses search', async ({ pag
 
 test('Ctrl+K palette filters commands and runs one from the keyboard', async ({ page }) => {
   await openDemo(page);
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('ControlOrMeta+k');
   const palette = page.getByRole('dialog', { name: 'Commands' });
   await expect(palette).toBeVisible();
   await expect(palette.getByRole('combobox')).toBeFocused();
@@ -58,14 +58,14 @@ test('Ctrl+K palette filters commands and runs one from the keyboard', async ({ 
   await page.keyboard.press('Escape');
   await expect(palette).toBeHidden();
   await expect(page.locator('#paletteBtn')).toBeFocused();
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('ControlOrMeta+k');
   await page.keyboard.type('zzzz');
   await expect(palette).toContainText('No matching commands');
 });
 
 test('palette switches server', async ({ page }) => {
   await openDemo(page);
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('ControlOrMeta+k');
   await page.keyboard.type('switch to testbox');
   await page.keyboard.press('Enter');
   await expect(page.locator('#host option:checked')).toHaveText('testbox');
