@@ -1,7 +1,9 @@
 import { esc } from './dom.js';
 // Command palette: commands are {label, hint?, run}. Built fresh on each open so it reflects current servers.
 export function openPalette(commands) {
-  if (document.querySelector('.palette')) return;
+  if (document.querySelector('.palette[open]')) return;
+  // A just-closed palette lingers until its close event runs; a quick reopen replaces it.
+  document.querySelector('.palette')?.remove();
   const previous = document.activeElement;
   const dialog = document.createElement('dialog');
   dialog.className = 'palette';
